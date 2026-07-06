@@ -1,0 +1,17 @@
+{
+  "project_paths": [
+    "~/projects/claudegauge",
+    "~/projects/another-project"
+  ],
+  "project_doc_names": [
+    "PROJECT_OS.md",
+    "ROADMAP.md",
+    "DECISIONS.md",
+    "decisions.md",
+    "DECISION_LOG.md"
+  ],
+  "inbox_path": "inbox.md",
+  "data_dir": "data",
+  "exports_dir": "exports",
+  "serve_port": 8787
+}

@@ -1,0 +1,17 @@
+# Local runtime state
+data/
+exports/
+config.json
+inbox.md
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+venv/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
