@@ -276,11 +276,11 @@ def _mock_draft(user: str, s: str, revised: bool = False) -> str:
         "If you've bounded a judge loop differently, I want to hear how, and "
         "I'm genuinely asking.",
     ]
-    words_needed = 400
-    text = gist + "\n\n" + "\n\n".join(body_paras)
-    # pad naturally if under the floor
+    body = "\n\n".join(body_paras)
+    # The reviewer measures the body without the gist paratext; pad the body
+    # comfortably past the 400-word floor.
     filler = ("The run log has a row for every step now, and reading it back "
               "is the closest thing this project has to a diary. ")
-    while len(re.findall(r"[\w'-]+", text)) < words_needed:
-        text += "\n\n" + filler
-    return text
+    while len(re.findall(r"[\w'-]+", body)) < 430:
+        body += "\n\n" + filler
+    return gist + "\n\n" + body

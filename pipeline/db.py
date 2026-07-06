@@ -345,6 +345,13 @@ def get_latest_draft(conn, post_id: str) -> S.WriterOutput | None:
     return S.WriterOutput.from_dict(d)
 
 
+def next_revision(conn, post_id: str) -> int:
+    row = conn.execute(
+        "SELECT COALESCE(MAX(revision), -1) + 1 AS n FROM writer_outputs "
+        "WHERE post_id = ?", (post_id,)).fetchone()
+    return int(row["n"])
+
+
 def get_edited_post(conn, post_id: str) -> S.EditedPost | None:
     row = conn.execute(
         "SELECT * FROM edited_posts WHERE post_id = ?", (post_id,)).fetchone()

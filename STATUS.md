@@ -3,6 +3,20 @@
 One note per phase, newest at the top. Written during the initial build
 session; future sessions should keep appending here.
 
+## Phase 2 — Orchestrator + Writer + Reviewer loop (2026-07-06)
+
+The reliability core. Reviewer implements the 9-point checklist literally:
+banned patterns, length bounds, AEO gist, copyright hygiene and publish
+claims are mechanical code checks (run first, free); voice match, insight
+arrival, unresolved observation, door-opening last line, throwaway line,
+claim traceability and pillar/format fit go to the LLM judge only after
+mechanicals pass. Bounded loop verified by test: exactly 3 reviews then
+EscalationRequired carrying the specific reasons. Edit stage reuses the
+Phase 1 refinement session (same 5-turn cap); manual hand-edit stays a
+first-class approve path. One judgment call: leverage/unlock are banned as
+verbs only, so the mechanical check uses a determiner heuristic rather than
+flagging every noun use. 45 tests green.
+
 ## Phase 1 — Capture + Researcher + Angle engine (2026-07-06)
 
 CLI capture, inbox.md watcher (polling, stdlib), read-only project-doc

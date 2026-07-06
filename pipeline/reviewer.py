@@ -1,0 +1,282 @@
+"""Editorial reviewer: LLM-as-judge with a literal 9-point checklist.
+
+Split by nature, not by vibe:
+- Mechanical criteria (banned patterns, length bounds, AEO gist line,
+  quote length, publish claims) are checked in code. Deterministic, free,
+  and they catch most failures before a judge token is spent.
+- Subjective criteria (voice match, insight arrives, unresolved observation,
+  door-opening last line, throwaway line, claim traceability, pillar/format
+  consistency) go to the LLM judge.
+
+A failing verdict always carries the specific fail_reason; the orchestrator
+enforces the max-2-retries bound and escalates with that reason attached.
+"""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+from . import llm
+from . import schemas as S
+from .config import REPO_ROOT
+
+# --- banned patterns (context/brand-voice.md, hard rules) -------------------
+
+EM_DASH = "—"
+
+BANNED_LINGO = (
+    "game-changer",
+    "game changer",
+    "supercharge",
+    "paradigm shift",
+    "democratize",
+    "democratise",
+    "transformative",
+    "the future of",
+)
+# 'unlock' and 'leverage' are banned as verbs only. Without a POS tagger the
+# heuristic is: inflected forms are (nearly) always verbs; the bare form and
+# 'unlocked' count as verbs when a determiner-ish object follows.
+_DET = r"(?:the|a|an|this|that|these|those|our|your|my|their|its|it|them|new|real)"
+BANNED_VERB_PATTERNS = (
+    r"\bunlock(?:s|ing)?\b",
+    rf"\bunlocked\s+{_DET}\b",
+    r"\bleverag(?:es|ed|ing)\b",
+    rf"\bleverage\s+{_DET}\b",
+)
+
+SIGNPOST_SENTENCES = (
+    "here's where it gets interesting",
+    "here is where it gets interesting",
+    "here's where it got interesting",
+    "this is the part worth pausing on",
+    "and here's the real kicker",
+    "here's the real kicker",
+    "here's the thing",
+    "let that sink in",
+)
+
+NOT_X_BUT_Y = (
+    r"\bthis is not (?:just |only |merely )?(?:about )?\w[^.?!]*,\s*(?:it'?s|but)\b",
+    r"\bthis isn'?t (?:just |only |merely )?(?:about )?\w[^.?!]*[;,]\s*it'?s\b",
+    r"\bnot only\b[^.?!]*\bbut (?:also )?\b",
+    r"\bisn'?t (?:just|only|merely)\b[^.?!]*[;,]\s*it'?s\b",
+)
+
+PUBLISH_CLAIMS = (
+    "has been published",
+    "publishing this now",
+    "auto-published",
+    "scheduled for publication",
+    "posted to substack",
+    "posted to linkedin",
+)
+
+
+def _words(text: str) -> list[str]:
+    return re.findall(r"[\w'-]+", text)
+
+
+def _sentences(text: str) -> list[str]:
+    return [s for s in re.split(r"(?<=[.!?])\s+", text.strip()) if s]
+
+
+def _body_without_gist(text: str, fmt: str) -> str:
+    """For substack essays the first line is AEO paratext, not the piece."""
+    if fmt != "substack_essay":
+        return text
+    lines = text.lstrip().splitlines()
+    if lines and (lines[0].startswith(">") or
+                  (lines[0].startswith(("*", "_")) and lines[0].rstrip().endswith(("*", "_")))):
+        return "\n".join(lines[1:]).strip()
+    return text
+
+
+# --- mechanical checks -------------------------------------------------------
+
+def check_banned_patterns(text: str) -> list[S.ChecklistItem]:
+    items = []
+    lower = text.lower()
+
+    found = EM_DASH in text
+    items.append(S.ChecklistItem(
+        "no_em_dashes", not found,
+        "em dash found" if found else "clean"))
+
+    hits = [w for w in BANNED_LINGO if w in lower]
+    hits += [p for p in BANNED_VERB_PATTERNS if re.search(p, lower)]
+    items.append(S.ChecklistItem(
+        "no_performed_lingo", not hits,
+        f"banned lingo: {hits}" if hits else "clean"))
+
+    sp = [s for s in SIGNPOST_SENTENCES if s in lower]
+    items.append(S.ChecklistItem(
+        "no_signpost_sentences", not sp,
+        f"signposts: {sp}" if sp else "clean"))
+
+    nx = [p for p in NOT_X_BUT_Y if re.search(p, lower)]
+    items.append(S.ChecklistItem(
+        "no_not_x_but_y", not nx,
+        "'this is not X, it's Y' construction found" if nx else "clean"))
+
+    frag = _fragment_rhythm_score(text)
+    items.append(S.ChecklistItem(
+        "no_fragmented_rhythm", not frag,
+        "fragment-heavy rhythm (4+ consecutive sentences under 8 words)"
+        if frag else "clean"))
+    return items
+
+
+def _fragment_rhythm_score(text: str) -> bool:
+    """Flag 4+ consecutive sentences of under 8 words: the stacked punchy
+    rhythm the voice guide bans. Conversational asides happen; stacks don't."""
+    run = 0
+    for s in _sentences(text):
+        if len(_words(s)) < 8:
+            run += 1
+            if run >= 4:
+                return True
+        else:
+            run = 0
+    return False
+
+
+def check_length_bounds(text: str, fmt: str) -> S.ChecklistItem:
+    bounds = S.LENGTH_BOUNDS.get(fmt)
+    body = _body_without_gist(text, fmt)
+    if bounds is None:
+        return S.ChecklistItem("length_bounds", True, f"no bound for {fmt}")
+    unit, lo, hi = bounds
+    n = len(_words(body)) if unit == "words" else len(_sentences(body))
+    ok = lo <= n <= hi
+    return S.ChecklistItem(
+        "length_bounds", ok,
+        f"{n} {unit} (bound {lo}-{hi} for {fmt})")
+
+
+def check_aeo_gist(text: str, fmt: str) -> S.ChecklistItem:
+    """Substack only: a single distinctly-formatted line above the opening
+    (blockquote or italic aside), naming entities. Paratext, not preamble."""
+    if fmt != "substack_essay":
+        return S.ChecklistItem("aeo_gist_line", True, f"not required for {fmt}")
+    lines = text.lstrip().splitlines()
+    first = lines[0].strip() if lines else ""
+    is_quote = first.startswith("> ") and len(first) > 4
+    is_italic = ((first.startswith("*") and first.endswith("*") and not first.startswith("**"))
+                 or (first.startswith("_") and first.endswith("_")))
+    ok = is_quote or is_italic
+    return S.ChecklistItem(
+        "aeo_gist_line", ok,
+        "present as paratext" if ok else
+        "missing: substack pieces need a blockquote/italic gist line above the opening")
+
+
+def check_copyright_hygiene(text: str) -> S.ChecklistItem:
+    """No quotes over ~15 words from any source (and no lyric/poem blocks,
+    which this length rule also catches)."""
+    long_quotes = []
+    for m in re.finditer(r'"([^"]{40,})"', text):
+        if len(_words(m.group(1))) > 15:
+            long_quotes.append(m.group(1)[:50] + "...")
+    ok = not long_quotes
+    return S.ChecklistItem(
+        "copyright_hygiene", ok,
+        f"quote(s) over 15 words: {long_quotes}" if long_quotes else "clean")
+
+
+def check_no_publish_claim(text: str) -> S.ChecklistItem:
+    lower = text.lower()
+    hits = [p for p in PUBLISH_CLAIMS if p in lower]
+    return S.ChecklistItem(
+        "no_publish_action_or_claim", not hits,
+        f"publish claim in output: {hits}" if hits else
+        "clean (and there is no publish code path, by construction)")
+
+
+def mechanical_checklist(text: str, fmt: str) -> list[S.ChecklistItem]:
+    body = _body_without_gist(text, fmt)
+    items = check_banned_patterns(body)
+    items.append(check_length_bounds(text, fmt))
+    items.append(check_aeo_gist(text, fmt))
+    items.append(check_copyright_hygiene(text))
+    items.append(check_no_publish_claim(text))
+    return items
+
+
+# --- the judge ---------------------------------------------------------------
+
+JUDGE_SYSTEM = """You are the editorial reviewer in Snow Abad's content
+pipeline, judging one draft against her brand voice guide. Judge each
+criterion independently and honestly; a wrong pass is worse than a wrong
+fail. Reply with a JSON array of objects:
+{"criterion": "<name>", "passed": true|false, "note": "<specific, one line>"}
+covering exactly these criteria:
+- voice_match: conversational not fragmented, casually confident, direct,
+  short sentences, no filler openers; reads like Snow's guide.
+- insight_arrives_not_announced: evidence first, pattern named after; the
+  thesis is not delivered upfront.
+- one_unresolved_observation: at least one observation is honestly left open.
+- last_line_opens_a_door: the final line opens rather than restating the
+  thesis cleanly.
+- one_throwaway_line: one small, specific, slightly unnecessary human detail.
+- claim_traceability: every specific number, project name, or fact traces to
+  the provided note/context; nothing invented.
+- pillar_format_consistency: content matches the tagged pillar and the
+  target platform's rules."""
+
+
+def judge_subjective(draft_text: str, pillar: str, fmt: str,
+                     source_note: str, client: llm.LLMClient,
+                     context_dir: Path | None = None) -> list[S.ChecklistItem]:
+    voice = _voice_context(context_dir)
+    user = (f"PILLAR: {pillar}\nFORMAT: {fmt}\n\n"
+            f"SOURCE NOTE (ground truth for claims):\n{source_note}\n\n"
+            f"BRAND VOICE GUIDE:\n{voice}\n\nDRAFT:\n{draft_text}")
+    raw = client.complete_json("review", JUDGE_SYSTEM, user)
+    items = []
+    for it in raw if isinstance(raw, list) else []:
+        items.append(S.ChecklistItem(
+            criterion=str(it.get("criterion", "unknown")),
+            passed=bool(it.get("passed", False)),
+            note=str(it.get("note", "")),
+        ))
+    if not items:
+        items.append(S.ChecklistItem("voice_match", False,
+                                     "judge returned no usable checklist"))
+    return items
+
+
+def _voice_context(context_dir: Path | None = None) -> str:
+    d = context_dir or REPO_ROOT / "context"
+    parts = []
+    for name in ("brand-voice.md", "platforms.md"):
+        f = d / name
+        if f.is_file():
+            parts.append(f.read_text(encoding="utf-8"))
+    return "\n\n".join(parts)
+
+
+# --- verdict -----------------------------------------------------------------
+
+def review(post_id: str, draft_text: str, pillar: str, fmt: str,
+           source_note: str, revision_count: int,
+           client: llm.LLMClient) -> S.ReviewerVerdict:
+    """Full review: mechanical first, judge second (skipped if mechanical
+    already failed, to save budget). Verdict carries the specific reason."""
+    checklist = mechanical_checklist(draft_text, fmt)
+    mech_fails = [c for c in checklist if not c.passed]
+    if not mech_fails:
+        checklist += judge_subjective(draft_text, pillar, fmt, source_note, client)
+    fails = [c for c in checklist if not c.passed]
+    passed = not fails
+    fail_reason = None if passed else "; ".join(
+        f"{c.criterion}: {c.note}" for c in fails)
+    return S.ReviewerVerdict(
+        post_id=post_id,
+        passed=passed,
+        checklist=checklist,
+        revision_count=revision_count,
+        fail_reason=fail_reason,
+        reviewed_at=S.now_iso(),
+    )

@@ -143,6 +143,79 @@ def cmd_serve(args) -> int:
     return 0
 
 
+def cmd_run(args) -> int:
+    """Picked angle -> writer -> bounded reviewer loop -> awaiting edit."""
+    from . import orchestrator
+    conn = db.connect()
+    db.init_db(conn)
+    result = orchestrator.run_pipeline(conn, args.angle_id)
+    if result["status"] == "escalated":
+        print("ESCALATED after the retry bound. The reviewer's specific reasons:")
+        print(f"  {result['fail_reason']}")
+        print(f"draft is saved as post {result['post_id']}; "
+              "edit it yourself or start over with a different angle.")
+        return 2
+    draft = db.get_latest_draft(conn, result["post_id"])
+    print(f"review passed (revisions used: {result['revisions_used']}). "
+          f"post_id: {result['post_id']}")
+    print("-" * 60)
+    print(draft.draft_text)
+    print("-" * 60)
+    print(result["next"])
+    return 0
+
+
+def cmd_edit(args) -> int:
+    """Edit-stage conversation: request changes in plain language, approve,
+    or paste your own final text. Same bounded loop as angle refinement."""
+    from . import orchestrator
+    conn = db.connect()
+    db.init_db(conn)
+    current = db.get_latest_draft(conn, args.post_id)
+    if not current:
+        print(f"no draft for post {args.post_id}", file=sys.stderr)
+        return 1
+    session = orchestrator.edit_session_for(conn, args.post_id)
+    print(current.draft_text)
+    print("\n(request changes in plain language; 'approve' locks it in)")
+    while True:
+        try:
+            msg = input(f"[{session.turns_remaining} turns left] you> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return 0
+        if not msg:
+            continue
+        if msg.lower() == "approve":
+            orchestrator.approve_post(conn, args.post_id)
+            print(f"approved. next: python3 -m pipeline export {args.post_id}")
+            return 0
+        try:
+            revised = orchestrator.apply_edit_request(
+                conn, args.post_id, msg, session)
+        except refinement.RefinementCapReached:
+            print(f"engine> {refinement.FORCE_DECISION_PROMPT}")
+            continue
+        print("-" * 60)
+        print(revised.draft_text)
+        print("-" * 60)
+        if session.cap_reached:
+            print(f"engine> {refinement.FORCE_DECISION_PROMPT}")
+
+
+def cmd_approve(args) -> int:
+    from . import orchestrator
+    conn = db.connect()
+    db.init_db(conn)
+    final_text = None
+    if args.from_file:
+        from pathlib import Path
+        final_text = Path(args.from_file).read_text(encoding="utf-8")
+    orchestrator.approve_post(conn, args.post_id, final_text)
+    print(f"approved. next: python3 -m pipeline export {args.post_id}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="pipeline",
@@ -184,6 +257,19 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("serve", help="local page (on-demand, Ctrl-C stops)")
     s.add_argument("--port", type=int, default=None)
     s.set_defaults(fn=cmd_serve)
+
+    rn = sub.add_parser("run", help="picked angle -> draft -> bounded review")
+    rn.add_argument("angle_id")
+    rn.set_defaults(fn=cmd_run)
+
+    e = sub.add_parser("edit", help="conversational edit stage for a post")
+    e.add_argument("post_id")
+    e.set_defaults(fn=cmd_edit)
+
+    ap = sub.add_parser("approve", help="approve a draft (optionally hand-edited)")
+    ap.add_argument("post_id")
+    ap.add_argument("--from-file", help="use this file's contents as the final text")
+    ap.set_defaults(fn=cmd_approve)
 
     return p
 
