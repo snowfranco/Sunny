@@ -3,6 +3,15 @@
 One note per phase, newest at the top. Written during the initial build
 session; future sessions should keep appending here.
 
+## Phase 3 — Artist scaffold (2026-07-06)
+
+Valid image + caption, exactly the v1 bar. The image is a deterministic
+locally-generated SVG card (1200x630, title + pillar) so there is no
+image-API dependency to decide yet; the caption goes through the LLM layer.
+artist.py is the single swap-in point when an image model gets chosen, and
+the orchestrator already calls it behind one call site so the flow won't
+change shape. No quality rubric, no retry loop, per the brief. 47 tests.
+
 ## Phase 2 — Orchestrator + Writer + Reviewer loop (2026-07-06)
 
 The reliability core. Reviewer implements the 9-point checklist literally:
