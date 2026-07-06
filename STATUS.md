@@ -3,6 +3,18 @@
 One note per phase, newest at the top. Written during the initial build
 session; future sessions should keep appending here.
 
+## Phase 6 — Golden fixtures + pass-rate script (2026-07-06)
+
+Nine fixtures, 3 per pillar, all five formats covered, each with a real
+note and a golden post that passes the mechanical rules today (also pinned
+by a unit test, so drift shows up in the normal suite). run_goldens.py does
+compliance plus a full writer-reviewer regeneration into data/goldens/ for
+by-eye diffing; passrate.py reads PipelineRunLog for pass-rate, first-try
+rate, escalations, and repeated failure reasons. Building the fixtures
+caught two real bugs: the fragment check punished scripts for spoken rhythm
+(now format-aware, threshold 6 for scripts) and the mock writer ignored
+target format (now honors the angle's format line). 60 tests green.
+
 ## Phase 5 — Analytics + Growth researcher (2026-07-06)
 
 Flag raised as the brief anticipated: neither platform has a usable public

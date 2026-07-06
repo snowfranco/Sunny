@@ -95,7 +95,7 @@ def _body_without_gist(text: str, fmt: str) -> str:
 
 # --- mechanical checks -------------------------------------------------------
 
-def check_banned_patterns(text: str) -> list[S.ChecklistItem]:
+def check_banned_patterns(text: str, fmt: str = "") -> list[S.ChecklistItem]:
     items = []
     lower = text.lower()
 
@@ -120,22 +120,27 @@ def check_banned_patterns(text: str) -> list[S.ChecklistItem]:
         "no_not_x_but_y", not nx,
         "'this is not X, it's Y' construction found" if nx else "clean"))
 
-    frag = _fragment_rhythm_score(text)
+    # Scripts are written to be spoken: short sentences and natural pauses
+    # are the format working as intended (platforms.md), so the stacked-
+    # fragment threshold is higher there. The ban targets influencer rhythm,
+    # not speech rhythm.
+    threshold = 6 if fmt == "script" else 4
+    frag = _fragment_rhythm_score(text, threshold)
     items.append(S.ChecklistItem(
         "no_fragmented_rhythm", not frag,
-        "fragment-heavy rhythm (4+ consecutive sentences under 8 words)"
+        f"fragment-heavy rhythm ({threshold}+ consecutive sentences under 8 words)"
         if frag else "clean"))
     return items
 
 
-def _fragment_rhythm_score(text: str) -> bool:
-    """Flag 4+ consecutive sentences of under 8 words: the stacked punchy
-    rhythm the voice guide bans. Conversational asides happen; stacks don't."""
+def _fragment_rhythm_score(text: str, threshold: int = 4) -> bool:
+    """Flag `threshold`+ consecutive sentences of under 8 words: the stacked
+    punchy rhythm the voice guide bans. Asides happen; stacks don't."""
     run = 0
     for s in _sentences(text):
         if len(_words(s)) < 8:
             run += 1
-            if run >= 4:
+            if run >= threshold:
                 return True
         else:
             run = 0
@@ -196,7 +201,7 @@ def check_no_publish_claim(text: str) -> S.ChecklistItem:
 
 def mechanical_checklist(text: str, fmt: str) -> list[S.ChecklistItem]:
     body = _body_without_gist(text, fmt)
-    items = check_banned_patterns(body)
+    items = check_banned_patterns(body, fmt)
     items.append(check_length_bounds(text, fmt))
     items.append(check_aeo_gist(text, fmt))
     items.append(check_copyright_hygiene(text))

@@ -238,10 +238,74 @@ def _mock_text(kind: str, user: str) -> str:
     raise LLMError(f"no mock text for kind {kind!r}")
 
 
+_FMT_ALT = "substack_essay|linkedin_post|social_copy|script|portal_briefing"
+
+
+def _detect_format(user: str) -> str:
+    """The writer's prompt names the target format on the angle's
+    'format:' line (or parenthesized in edit revisions); the mock honors it
+    so format-bound reviewer checks exercise realistically offline. Plain
+    substring search would misfire on the platforms.md context blob, which
+    names every format."""
+    m = re.search(rf"^\s*format:\s*({_FMT_ALT})\b", user, re.MULTILINE)
+    if m:
+        return m.group(1)
+    m = re.search(rf"CURRENT DRAFT \(({_FMT_ALT})\)", user)
+    if m:
+        return m.group(1)
+    return "substack_essay"
+
+
 def _mock_draft(user: str, s: str, revised: bool = False) -> str:
-    """A mock draft engineered to pass the mechanical reviewer checks for the
-    substack_essay format (gist line, length bounds, no banned patterns)."""
+    """Mock drafts engineered to pass the mechanical reviewer checks for
+    their format (gist line, length bounds, no banned patterns)."""
     tag = "revised " if revised else ""
+    fmt = _detect_format(user)
+    if fmt == "linkedin_post":
+        return (
+            f"I have been sitting with something after this build ({tag}{s}).\n\n"
+            "The part I expected to be hard was done in an afternoon, and the "
+            "part I expected to be free took the rest of the week. The gap "
+            "between those two estimates is where the actual work lived, and "
+            "I keep underestimating it in the same direction every time.\n\n"
+            "That didn't work out as expected, but here's what I learned: the "
+            "estimate being wrong in a consistent direction is information, "
+            "and I had been throwing it away.\n\n"
+            "I'm not sure if you'd agree, but a miss that repeats is closer "
+            "to a measurement than a mistake. What does your error keep "
+            "telling you?")
+    if fmt == "social_copy":
+        return (f"The hard part was free and the free part was hard ({tag}{s}). "
+                "Not sure yet which estimate to stop trusting.")
+    if fmt == "script":
+        return (
+            f"So here is what actually happened with this build ({tag}{s}). "
+            "I planned the week around the part that looked difficult, and "
+            "that part folded in an afternoon.\n\n"
+            "The part I had budgeted nothing for is the one that took the "
+            "week. That didn't work out as expected, but here's what I "
+            "learned. My estimates are wrong in a consistent direction, and "
+            "a consistent miss is a measurement if you bother to read it.\n\n"
+            "I'm not sure if you'd agree with that framing. Sit with it "
+            "before your next build and see which part you're budgeting "
+            "nothing for.")
+    if fmt == "portal_briefing":
+        return (
+            f"Three signals crossed my desk this week ({tag}{s}), and they "
+            "point the same direction: the boring parts of agent engineering "
+            "are becoming the interesting parts.\n\n"
+            "**Budgets and bounds**\n\n"
+            "A session-budgeting library went open source this week "
+            "(https://example.org/mock-item-1). Small API, adoptable in an "
+            "afternoon, worth that afternoon if you meter your API spend.\n\n"
+            "**Handoffs**\n\n"
+            "A schema-first agent framework hit 1.0 "
+            "(https://example.org/mock-item-2), arguing freeform handoffs are "
+            "where agent systems fail silently. My own pipeline leans the "
+            "same way, so read my endorsement with that bias priced in.\n\n"
+            "I don't yet know whether this rediscovery of delivery "
+            "discipline sticks. Worth watching which teams keep their caps on.")
+    # default: substack_essay
     gist = (f"> Covered here: the sunny pipeline build ({tag}{s}), SQLite "
             "handoffs, a bounded reviewer loop, and what the retry cap caught.")
     body_paras = [
