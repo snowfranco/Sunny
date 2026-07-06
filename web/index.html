@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sunny — content pipeline</title>
+<style>
+  :root { --bg:#14161a; --panel:#1d2026; --ink:#e8e6e1; --dim:#9a978f;
+          --accent:#e8b04b; --line:#2c3038; --ok:#7bb673; --bad:#c96f5f; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.5 system-ui, sans-serif; background:var(--bg);
+         color:var(--ink); }
+  header { padding:14px 22px; border-bottom:1px solid var(--line);
+           display:flex; align-items:baseline; gap:12px; }
+  header h1 { font-size:17px; margin:0; }
+  header span { color:var(--dim); font-size:13px; }
+  main { max-width:980px; margin:0 auto; padding:20px; display:grid; gap:20px; }
+  section { background:var(--panel); border:1px solid var(--line);
+            border-radius:10px; padding:16px 18px; }
+  h2 { font-size:14px; text-transform:uppercase; letter-spacing:.06em;
+       color:var(--dim); margin:0 0 12px; }
+  textarea, input[type=text] { width:100%; background:var(--bg); color:var(--ink);
+      border:1px solid var(--line); border-radius:8px; padding:9px 11px;
+      font:inherit; }
+  textarea { min-height:70px; resize:vertical; }
+  button { background:var(--accent); color:#14161a; border:0; border-radius:8px;
+           padding:8px 14px; font:inherit; font-weight:600; cursor:pointer; }
+  button.ghost { background:transparent; color:var(--accent);
+                 border:1px solid var(--accent); }
+  button:disabled { opacity:.45; cursor:default; }
+  .item { border:1px solid var(--line); border-radius:8px; padding:10px 12px;
+          margin:8px 0; }
+  .item .meta { color:var(--dim); font-size:12.5px; margin-top:4px; }
+  .angle.picked { border-color:var(--ok); }
+  .pill { display:inline-block; font-size:11.5px; padding:1px 8px;
+          border:1px solid var(--line); border-radius:999px; color:var(--dim);
+          margin-right:6px; }
+  .chat { display:flex; flex-direction:column; gap:8px; margin:10px 0; }
+  .msg { padding:8px 12px; border-radius:10px; max-width:85%;
+         white-space:pre-wrap; }
+  .msg.you { align-self:flex-end; background:#2a3140; }
+  .msg.engine { align-self:flex-start; background:#232720; }
+  .row { display:flex; gap:8px; margin-top:8px; }
+  .row input { flex:1; }
+  .notice { color:var(--accent); font-size:13.5px; margin-top:8px; }
+  .error { color:var(--bad); font-size:13.5px; margin-top:8px; }
+  .dim { color:var(--dim); }
+  pre.draft { white-space:pre-wrap; font:inherit; background:var(--bg);
+              border:1px solid var(--line); border-radius:8px; padding:12px; }
+</style>
+</head>
+<body>
+<header><h1>sunny</h1><span>drafts only, never publishes</span></header>
+<main>
+
+  <section>
+    <h2>Capture a topic</h2>
+    <textarea id="cap-text" placeholder="Drop a topic, a note, a half-thought..."></textarea>
+    <div class="row"><button onclick="capture()">Capture</button></div>
+    <div id="cap-out" class="notice"></div>
+  </section>
+
+  <section>
+    <h2>Researcher suggestions <span class="dim" id="sugg-when"></span></h2>
+    <div id="suggestions" class="dim">Run <code>python3 -m pipeline research</code> (or wait for the daily cron), then reload.</div>
+  </section>
+
+  <section>
+    <h2>Notes</h2>
+    <div id="notes" class="dim">loading…</div>
+  </section>
+
+  <section id="angles-section" style="display:none">
+    <h2>Angles <span class="dim" id="angles-note"></span></h2>
+    <div id="angles"></div>
+    <div class="chat" id="angle-chat"></div>
+    <div class="row">
+      <input type="text" id="refine-text"
+             placeholder="Refine in plain language: combine 2 and 3, angle it for solo builders…">
+      <button onclick="refineAngle()" id="refine-btn">Send</button>
+    </div>
+    <div id="angle-notice" class="notice"></div>
+  </section>
+
+  <section id="edit-section" style="display:none">
+    <h2>Edit draft <span class="dim" id="edit-post"></span></h2>
+    <pre class="draft" id="draft-text"></pre>
+    <div class="chat" id="edit-chat"></div>
+    <div class="row">
+      <input type="text" id="edit-msg"
+             placeholder="Request a change: exclude the paragraph about ___">
+      <button onclick="editRefine()">Send</button>
+      <button class="ghost" onclick="approvePost()">Approve as-is</button>
+    </div>
+    <div id="edit-notice" class="notice"></div>
+  </section>
+
+</main>
+<script>
+let session = null;        // angle refinement session id
+let selectedAngle = null;  // angle_id the refine applies to
+let currentNote = null;
+let editState = null;      // {post_id, session_id}
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g,
+  c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+async function api(path, body) {
+  const opts = body ? {method:"POST", body:JSON.stringify(body),
+                       headers:{"Content-Type":"application/json"}} : {};
+  const r = await fetch(path, opts);
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error || r.statusText);
+  return data;
+}
+
+async function capture() {
+  const raw = $("cap-text").value.trim();
+  if (!raw) return;
+  try {
+    const note = await api("/api/capture", {raw_text: raw});
+    $("cap-text").value = "";
+    $("cap-out").textContent = "captured " + note.note_id.slice(0,8);
+    loadNotes();
+  } catch (e) { $("cap-out").textContent = e.message; }
+}
+
+async function loadSuggestions() {
+  try {
+    const s = await api("/api/suggestions");
+    if (s.generated_at) $("sugg-when").textContent = "as of " + s.generated_at;
+    const all = [...(s.project_suggestions||[]), ...(s.landscape_suggestions||[])];
+    if (!all.length) return;
+    $("suggestions").innerHTML = all.map(n => `
+      <div class="item">
+        <span class="pill">${esc(n.source)}</span>${esc(n.raw_text.slice(0,220))}
+        ${n.source_url ? `<div class="meta"><a href="${esc(n.source_url)}" target="_blank" style="color:var(--dim)">${esc(n.source_url)}</a></div>` : ""}
+        <div class="row"><button class="ghost" onclick="genAngles('${n.note_id}')">Generate angles</button></div>
+      </div>`).join("");
+  } catch (e) { /* leave the hint text */ }
+}
+
+async function loadNotes() {
+  try {
+    const notes = await api("/api/notes");
+    $("notes").innerHTML = notes.length ? notes.slice(0, 20).map(n => `
+      <div class="item">
+        <span class="pill">${esc(n.source)}</span>${esc(n.raw_text.slice(0,180))}
+        <div class="row"><button class="ghost" onclick="genAngles('${n.note_id}')">Generate angles</button></div>
+      </div>`).join("") : "No notes yet. Capture one above.";
+  } catch (e) { $("notes").textContent = e.message; }
+}
+
+function renderAngles(angles) {
+  $("angles").innerHTML = angles.map((a, i) => `
+    <div class="item angle ${selectedAngle===a.angle_id?"picked":""}" id="angle-${a.angle_id}">
+      <strong>${i+1}. ${esc(a.title)}</strong>
+      <div>${esc(a.hook)}</div>
+      <div class="meta">
+        <span class="pill">${esc(a.pillar)}</span>
+        <span class="pill">${esc(a.format)}</span>
+        <span class="pill">${esc(a.strategic_rationale)}</span>
+        ${esc(a.rationale)}
+      </div>
+      <div class="row">
+        <button class="ghost" onclick="selectAngle('${a.angle_id}')">Refine this one</button>
+        <button onclick="pickAngle('${a.angle_id}')">Pick, proceed</button>
+      </div>
+    </div>`).join("");
+}
+
+async function genAngles(noteId) {
+  currentNote = noteId;
+  $("angles-section").style.display = "";
+  $("angles-note").textContent = "note " + noteId.slice(0,8);
+  $("angle-chat").innerHTML = "";
+  $("angle-notice").textContent = "generating…";
+  try {
+    const out = await api("/api/generate_angles", {note_id: noteId});
+    session = out.session_id;
+    renderAngles(out.angles);
+    selectedAngle = out.angles[0]?.angle_id || null;
+    $("angle-notice").textContent =
+      `refinement turns remaining: ${out.turns_remaining}`;
+    $("angles-section").scrollIntoView({behavior:"smooth"});
+  } catch (e) { $("angle-notice").textContent = e.message; }
+}
+
+function selectAngle(id) {
+  selectedAngle = id;
+  document.querySelectorAll(".angle").forEach(el =>
+    el.classList.toggle("picked", el.id === "angle-"+id));
+}
+
+function addMsg(chatId, who, text) {
+  const div = document.createElement("div");
+  div.className = "msg " + who;
+  div.textContent = text;
+  $(chatId).appendChild(div);
+}
+
+async function refineAngle() {
+  const msg = $("refine-text").value.trim();
+  if (!msg || !session || !selectedAngle) return;
+  addMsg("angle-chat", "you", msg);
+  $("refine-text").value = "";
+  try {
+    const out = await api("/api/refine_angle",
+      {session_id: session, angle_id: selectedAngle, message: msg});
+    if (out.cap_reached) { $("angle-notice").textContent = out.prompt; return; }
+    addMsg("angle-chat", "engine",
+      `${out.angle.title}\n${out.angle.hook}\n[${out.angle.pillar} · ${out.angle.format} · ${out.angle.strategic_rationale}]`);
+    selectedAngle = out.angle.angle_id;
+    renderAngles([out.angle]);
+    $("angle-notice").textContent = out.prompt ? out.prompt :
+      `refinement turns remaining: ${out.turns_remaining}`;
+  } catch (e) { addMsg("angle-chat", "engine", "error: " + e.message); }
+}
+
+async function pickAngle(id) {
+  try {
+    const out = await api("/api/pick_angle", {angle_id: id});
+    $("angle-notice").textContent =
+      "locked in, handing to orchestrator. Run: " + out.next;
+  } catch (e) { $("angle-notice").textContent = e.message; }
+}
+
+// --- edit stage (backed by the orchestrator once a draft exists) -----------
+
+async function editRefine() {
+  const msg = $("edit-msg").value.trim();
+  if (!msg || !editState) return;
+  addMsg("edit-chat", "you", msg);
+  $("edit-msg").value = "";
+  try {
+    const out = await api("/api/edit_refine",
+      {post_id: editState.post_id, session_id: editState.session_id, message: msg});
+    if (out.cap_reached) { $("edit-notice").textContent = out.prompt; return; }
+    editState.session_id = out.session_id;
+    $("draft-text").textContent = out.draft_text;
+    addMsg("edit-chat", "engine", "revised the draft per your note.");
+    $("edit-notice").textContent = out.prompt ? out.prompt :
+      `refinement turns remaining: ${out.turns_remaining}`;
+  } catch (e) { addMsg("edit-chat", "engine", "error: " + e.message); }
+}
+
+async function approvePost() {
+  if (!editState) return;
+  try {
+    const out = await api("/api/approve_post", {post_id: editState.post_id});
+    $("edit-notice").textContent =
+      "approved. repurpose + export: " + (out.next || "done");
+  } catch (e) { $("edit-notice").textContent = e.message; }
+}
+
+// Deep-link: /?post=<post_id> opens the edit panel for a reviewed draft.
+async function maybeOpenEdit() {
+  const postId = new URLSearchParams(location.search).get("post");
+  if (!postId) return;
+  try {
+    const out = await api("/api/edit_refine", {post_id: postId, message: null});
+    editState = {post_id: postId, session_id: out.session_id};
+    $("edit-section").style.display = "";
+    $("edit-post").textContent = "post " + postId.slice(0,8);
+    $("draft-text").textContent = out.draft_text;
+    $("edit-notice").textContent =
+      `refinement turns remaining: ${out.turns_remaining}`;
+    $("edit-section").scrollIntoView();
+  } catch (e) { /* no such post yet */ }
+}
+
+loadSuggestions(); loadNotes(); maybeOpenEdit();
+</script>
+</body>
+</html>

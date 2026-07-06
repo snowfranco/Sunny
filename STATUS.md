@@ -3,6 +3,17 @@
 One note per phase, newest at the top. Written during the initial build
 session; future sessions should keep appending here.
 
+## Phase 1 — Capture + Researcher + Angle engine (2026-07-06)
+
+CLI capture, inbox.md watcher (polling, stdlib), read-only project-doc
+scanner, landscape scanner that drops any suggestion lacking a citable
+source_url, and the angle engine producing 3 schema-validated options with
+strategic_rationale. The refinement loop is one shared module used by both
+CLI and the local page, with turn accounting in SQLite: verified live that
+turn 5 surfaces "want to just lock this in..." and turn 6 refuses to
+iterate. LLM layer has deterministic mock mode plus the per-run token
+ceiling. 29 tests green; server routes smoke-tested with curl.
+
 ## Phase 0 — Scaffold (2026-07-06)
 
 Repo structure, config layer (env-driven model, deliberately unset), all 13
