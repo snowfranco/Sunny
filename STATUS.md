@@ -3,6 +3,17 @@
 One note per phase, newest at the top. Written during the initial build
 session; future sessions should keep appending here.
 
+## Phase 4 — Repurpose + Export (2026-07-06)
+
+Repurpose derives the LinkedIn extract (paragraph-bounded, header-free,
+schema-enforced) and Notes hook from the approved text; the Portal briefing
+already lives in the Writer as a first-class format. Export writes a local
+draft bundle directory and nothing else. The no-publish constraint now sits
+at four layers: schema validation, SQL CHECK, a code-level assertion on
+every export, and a static test that greps the package for HTTP clients and
+publish endpoints (only llm.py and localhost-only serve.py may speak HTTP).
+52 tests green; bundle smoke-tested end to end via CLI.
+
 ## Phase 3 — Artist scaffold (2026-07-06)
 
 Valid image + caption, exactly the v1 bar. The image is a deterministic

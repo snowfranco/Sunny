@@ -216,6 +216,30 @@ def cmd_approve(args) -> int:
     return 0
 
 
+def cmd_export(args) -> int:
+    """Repurpose (if needed) + assemble the draft bundle. Never publishes."""
+    from . import export as export_mod
+    from . import llm, repurpose
+    from .runlog import log_step
+    conn = db.connect()
+    db.init_db(conn)
+    run_id = S.new_id()
+    if not db.get_repurposed(conn, args.post_id):
+        rep = repurpose.repurpose(conn, args.post_id,
+                                  llm.LLMClient(run_id=run_id))
+        log_step(conn, run_id, "repurpose", args.post_id,
+                 output_ref="linkedin_extract+notes_hook")
+    bundle, out_dir = export_mod.export_bundle(conn, args.post_id)
+    log_step(conn, run_id, "export", args.post_id, output_ref=str(out_dir),
+             pass_fail=True)
+    print(f"draft bundle written to {out_dir}")
+    print("contents: post.md, linkedin.md, notes-hook.txt"
+          + (", image + caption.txt" if bundle.image_path else "")
+          + ", bundle.json")
+    print("status: draft. Publishing is yours to do, manually, elsewhere.")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="pipeline",
@@ -270,6 +294,11 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("post_id")
     ap.add_argument("--from-file", help="use this file's contents as the final text")
     ap.set_defaults(fn=cmd_approve)
+
+    ex = sub.add_parser("export", help="repurpose + write the draft bundle "
+                                       "(never publishes)")
+    ex.add_argument("post_id")
+    ex.set_defaults(fn=cmd_export)
 
     return p
 
