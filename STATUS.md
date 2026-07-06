@@ -3,6 +3,18 @@
 One note per phase, newest at the top. Written during the initial build
 session; future sessions should keep appending here.
 
+## Phase 5 — Analytics + Growth researcher (2026-07-06)
+
+Flag raised as the brief anticipated: neither platform has a usable public
+analytics API for this case (Substack has none; LinkedIn's needs partner
+access), so manual paste-in via `analytics add` is the designed v1 path,
+documented in analytics.py where a future fetcher would slot in. Growth
+report aggregates deterministically (top performers, per-pillar rollups,
+reviewer pass-rate and repeated failure reasons from PipelineRunLog, all in
+one sitting per tier 3), with the LLM adding only trend notes and
+recommendations over those numbers. context-update records ContextUpdateLog;
+running the CLI is Snow's approval. 57 tests green.
+
 ## Phase 4 — Repurpose + Export (2026-07-06)
 
 Repurpose derives the LinkedIn extract (paragraph-bounded, header-free,

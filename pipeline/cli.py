@@ -240,6 +240,44 @@ def cmd_export(args) -> int:
     return 0
 
 
+def cmd_analytics_add(args) -> int:
+    from . import analytics
+    conn = db.connect()
+    db.init_db(conn)
+    snap = analytics.add_snapshot(
+        conn, args.post_id, args.platform, args.views, args.likes,
+        args.comments, args.shares, args.days)
+    print(f"recorded {args.platform} snapshot for {args.post_id} "
+          f"(day {snap.days_since_publish})")
+    return 0
+
+
+def cmd_growth_report(args) -> int:
+    from . import growth
+    conn = db.connect()
+    db.init_db(conn)
+    report = growth.generate_report(conn, args.start, args.end)
+    print(f"growth report {report.period_start} -> {report.period_end}")
+    print(f"top performers: {report.top_performers or 'none yet'}")
+    for p, v in report.pillar_performance.items():
+        print(f"  {p}: {v}")
+    stats = growth.reviewer_pass_stats(conn, report.period_start, report.period_end)
+    print(f"reviewer: {stats['reviews']} review(s), pass rate {stats['pass_rate']}")
+    print(f"written to {load_config().data_path / 'reports'}")
+    return 0
+
+
+def cmd_context_update(args) -> int:
+    from . import growth
+    conn = db.connect()
+    db.init_db(conn)
+    entry = growth.record_context_update(conn, args.files, args.summary)
+    print(f"context update recorded at {entry.updated_at}: "
+          f"{', '.join(entry.changed_files)}")
+    print("tier 2 reminder: re-run tools/run_goldens.py and eyeball the diff.")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="pipeline",
@@ -299,6 +337,34 @@ def build_parser() -> argparse.ArgumentParser:
                                        "(never publishes)")
     ex.add_argument("post_id")
     ex.set_defaults(fn=cmd_export)
+
+    an = sub.add_parser("analytics", help="manual metric paste-in (no usable "
+                                          "public APIs; see analytics.py)")
+    an_sub = an.add_subparsers(dest="analytics_command", required=True)
+    aa = an_sub.add_parser("add", help="record one snapshot from a platform dashboard")
+    aa.add_argument("post_id")
+    aa.add_argument("--platform", required=True, choices=["substack", "linkedin"])
+    aa.add_argument("--views", type=int, required=True)
+    aa.add_argument("--likes", type=int, required=True)
+    aa.add_argument("--comments", type=int, required=True)
+    aa.add_argument("--shares", type=int, required=True)
+    aa.add_argument("--days", type=int, required=True,
+                    help="days since publish")
+    aa.set_defaults(fn=cmd_analytics_add)
+
+    gr = sub.add_parser("growth-report", help="aggregate analytics + reviewer "
+                                              "health into the 2-4 week report")
+    gr.add_argument("--start", help="YYYY-MM-DD (default: end - 28d)")
+    gr.add_argument("--end", help="YYYY-MM-DD (default: today)")
+    gr.set_defaults(fn=cmd_growth_report)
+
+    cu = sub.add_parser("context-update",
+                        help="record an approved context/*.md update "
+                             "(running this IS Snow's approval)")
+    cu.add_argument("-f", "--file", action="append", required=True,
+                    dest="files", help="changed file, repeatable")
+    cu.add_argument("-s", "--summary", required=True)
+    cu.set_defaults(fn=cmd_context_update)
 
     return p
 
