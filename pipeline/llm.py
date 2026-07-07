@@ -136,7 +136,11 @@ class LLMClient:
             "messages": [{"role": "system", "content": system},
                          {"role": "user", "content": user}],
             "stream": False,
-            "options": {"num_predict": max_tokens},
+            # num_ctx must be set explicitly: the model's default window is
+            # often 4096, which the writer prompt alone nearly fills. See
+            # config.ollama_num_ctx().
+            "options": {"num_predict": max_tokens,
+                        "num_ctx": config.ollama_num_ctx()},
         }
         if json_mode:
             payload["format"] = "json"

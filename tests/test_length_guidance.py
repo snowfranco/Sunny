@@ -46,7 +46,11 @@ class _UnderWriter(llm.LLMClient):
 
     def complete_text(self, kind, system, user, max_tokens=2048):
         self.calls += 1
-        if "failed on LENGTH" in user:
+        # Recovery requires BOTH the expand order and the previous draft in
+        # the prompt: this pins the orchestrator passing the failed text
+        # back so retries edit instead of cold-regenerating. (Stored drafts
+        # are stripped, so compare against the stripped text.)
+        if "failed on LENGTH" in user and self.SHORT.strip() in user:
             return llm._mock_draft(user, "expanded")  # full-length mock essay
         return self.SHORT
 

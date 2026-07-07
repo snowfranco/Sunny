@@ -21,6 +21,7 @@ class _StubOllama(BaseHTTPRequestHandler):
                 "reached": "ollama-stub",
                 "model": body.get("model"),
                 "json_mode": body.get("format") == "json",
+                "num_ctx": body.get("options", {}).get("num_ctx"),
             })},
             "prompt_eval_count": 10,
             "eval_count": 5,
@@ -112,6 +113,9 @@ class TestOllamaRouting(unittest.TestCase):
             self.assertEqual(data["model"], "test-model")  # prefix stripped
             self.assertFalse(data["json_mode"])
             self.assertEqual(client.budget.used, 15)  # counts from the stub
+            # num_ctx must be sent explicitly: the model default (~4096) is
+            # smaller than the writer prompt and silently truncates output.
+            self.assertEqual(data["num_ctx"], 8192)
 
     def test_json_calls_request_json_format(self):
         with self._env():

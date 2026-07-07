@@ -110,6 +110,16 @@ def gemini_api_key() -> str | None:
             or os.environ.get("GOOGLE_API_KEY") or None)
 
 
+def ollama_num_ctx() -> int:
+    """Context window for Ollama calls. Ollama's model default (often 4096)
+    is smaller than this pipeline's writer prompt (~4k tokens), so the
+    prompt gets silently truncated and generation stops after a couple
+    hundred tokens; drafts cap out around 220-270 words no matter what the
+    instructions say. 8192 fits the prompts plus a full essay; raise via
+    PIPELINE_OLLAMA_NUM_CTX if you extend the context files a lot."""
+    return int(os.environ.get("PIPELINE_OLLAMA_NUM_CTX", "8192"))
+
+
 def mock_mode() -> bool:
     return os.environ.get("PIPELINE_MOCK") == "1" or pipeline_model() is None
 

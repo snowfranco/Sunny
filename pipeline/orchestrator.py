@@ -53,7 +53,8 @@ def run_review_loop(conn, angle: S.AngleOption, note: S.CaptureNote,
         if attempt < S.MAX_REVIEWER_RETRIES:
             draft = writer.write_draft(
                 conn, angle, note, client, post_id=draft.post_id,
-                revision=attempt + 1, feedback=verdict.fail_reason)
+                revision=attempt + 1, feedback=verdict.fail_reason,
+                previous_draft=draft.draft_text)
             log_step(conn, run_id, "writer", draft.post_id,
                      input_ref=verdict.fail_reason or "", output_ref=f"rev{attempt + 1}")
 

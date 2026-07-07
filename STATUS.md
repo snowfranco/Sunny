@@ -3,6 +3,19 @@
 One note per phase, newest at the top. Written during the initial build
 session; future sessions should keep appending here.
 
+## Ollama context window + retries that edit (2026-07-07)
+
+Root cause of the persistent short essays found by arithmetic, not
+prompting: the writer prompt is ~4k tokens and Ollama's default num_ctx for
+the model is 4096, so the window was full before generation started; Ollama
+silently truncates and the draft caps out around 220-270 words no matter
+what the instructions say. Every Ollama call now sets num_ctx explicitly
+(default 8192, PIPELINE_OLLAMA_NUM_CTX to override). Second fix while in
+there: reviewer retries now include the failed draft in the prompt, so the
+model expands or repairs a concrete text instead of cold-writing the piece
+again, which also stops rewrites from introducing brand-new violations.
+Retry cap unchanged. 85 tests green, goldens clean.
+
 ## Per-format writer briefs (2026-07-07)
 
 The social_copy overshoot (7 sentences against a 1-3 cap) was

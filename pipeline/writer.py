@@ -141,8 +141,14 @@ def _writing_context(context_dir: Path | None = None) -> str:
 def write_draft(conn, angle: S.AngleOption, note: S.CaptureNote,
                 client: llm.LLMClient, post_id: str | None = None,
                 revision: int = 0,
-                feedback: str | None = None) -> S.WriterOutput:
-    """First draft (revision 0) or a reviewer-feedback revision."""
+                feedback: str | None = None,
+                previous_draft: str | None = None) -> S.WriterOutput:
+    """First draft (revision 0) or a reviewer-feedback revision.
+
+    Retries carry the failed draft: revising a concrete text ("expand these
+    sections", "remove that em dash") is a far easier task than cold-writing
+    the piece again, especially for small local models, and cold rewrites
+    risk introducing new violations in place of the fixed ones."""
     user = (f"ANGLE:\n  title: {angle.title}\n  hook: {angle.hook}\n"
             f"  pillar: {angle.pillar}\n  format: {angle.format}\n"
             f"  why: {angle.rationale} ({angle.strategic_rationale})\n\n"
@@ -153,6 +159,11 @@ def write_draft(conn, angle: S.AngleOption, note: S.CaptureNote,
             f"Write the {angle.format} piece. Reply with the piece only."
             + _length_guidance(angle.format))
     if feedback:
+        if previous_draft:
+            user += ("\n\nPREVIOUS DRAFT (failed review):\n" + previous_draft
+                     + "\n\nRevise THIS draft rather than starting over: fix "
+                       "the listed problems and keep everything that was not "
+                       "flagged.")
         user += _feedback_addendum(feedback, angle.format)
         text = client.complete_text("revise_draft", WRITER_SYSTEM, user,
                                     max_tokens=3000)
