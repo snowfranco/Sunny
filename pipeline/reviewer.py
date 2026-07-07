@@ -14,6 +14,7 @@ enforces the max-2-retries bound and escalates with that reason attached.
 
 from __future__ import annotations
 
+import functools
 import re
 from pathlib import Path
 
@@ -25,7 +26,11 @@ from .config import REPO_ROOT
 
 EM_DASH = "—"
 
-BANNED_LINGO = (
+# Fallback defaults only. The live lists are parsed from the CHECKER-LEXICON
+# block in context/brand-voice.md by _lexicon(); these apply solely when that
+# file or block is unreachable, so the checker degrades safely rather than
+# silently letting everything through.
+_DEFAULT_BANNED_LINGO = (
     "game-changer",
     "game changer",
     "supercharge",
@@ -46,7 +51,7 @@ BANNED_VERB_PATTERNS = (
     rf"\bleverage\s+{_DET}\b",
 )
 
-SIGNPOST_SENTENCES = (
+_DEFAULT_SIGNPOST_SENTENCES = (
     "here's where it gets interesting",
     "here is where it gets interesting",
     "here's where it got interesting",
@@ -56,6 +61,45 @@ SIGNPOST_SENTENCES = (
     "here's the thing",
     "let that sink in",
 )
+
+
+def _parse_lexicon_section(text: str, name: str) -> list[str]:
+    """Pull one [section] out of the CHECKER-LEXICON block in brand-voice.md.
+    Returns lowercased entries, one per line, or [] if the section is absent."""
+    m = re.search(rf"\[{re.escape(name)}\]\s*\n(.*?)(?=\n\[|\n?-->|\Z)",
+                  text, re.S)
+    if not m:
+        return []
+    out = []
+    for line in m.group(1).splitlines():
+        s = line.strip()
+        if s and not s.startswith(("[", "#", "<!--", "-->")):
+            out.append(s.lower())
+    return out
+
+
+@functools.lru_cache(maxsize=8)
+def _lexicon_for(voice_path: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    try:
+        text = Path(voice_path).read_text(encoding="utf-8")
+    except OSError:
+        return _DEFAULT_BANNED_LINGO, _DEFAULT_SIGNPOST_SENTENCES
+    lingo = _parse_lexicon_section(text, "banned_lingo")
+    signposts = _parse_lexicon_section(text, "signpost_sentences")
+    return (tuple(lingo) or _DEFAULT_BANNED_LINGO,
+            tuple(signposts) or _DEFAULT_SIGNPOST_SENTENCES)
+
+
+def _lexicon() -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Live banned-lingo and signpost lists, read from context/brand-voice.md.
+    Cached per path; call _lexicon.cache_clear via _reload_lexicon() after
+    editing the file in a long-running process."""
+    return _lexicon_for(str(REPO_ROOT / "context" / "brand-voice.md"))
+
+
+def _reload_lexicon() -> None:
+    """Drop the cache so a running server picks up brand-voice.md edits."""
+    _lexicon_for.cache_clear()
 
 NOT_X_BUT_Y = (
     r"\bthis is not (?:just |only |merely )?(?:about )?\w[^.?!]*,\s*(?:it'?s|but)\b",
@@ -104,13 +148,14 @@ def check_banned_patterns(text: str, fmt: str = "") -> list[S.ChecklistItem]:
         "no_em_dashes", not found,
         "em dash found" if found else "clean"))
 
-    hits = [w for w in BANNED_LINGO if w in lower]
+    banned_lingo, signpost_sentences = _lexicon()
+    hits = [w for w in banned_lingo if w in lower]
     hits += [p for p in BANNED_VERB_PATTERNS if re.search(p, lower)]
     items.append(S.ChecklistItem(
         "no_performed_lingo", not hits,
         f"banned lingo: {hits}" if hits else "clean"))
 
-    sp = [s for s in SIGNPOST_SENTENCES if s in lower]
+    sp = [s for s in signpost_sentences if s in lower]
     items.append(S.ChecklistItem(
         "no_signpost_sentences", not sp,
         f"signposts: {sp}" if sp else "clean"))

@@ -90,10 +90,14 @@ class Handler(BaseHTTPRequestHandler):
                 self._ok(self._refine_angle(conn, body))
             elif url.path == "/api/pick_angle":
                 self._ok(self._pick(conn, body))
+            elif url.path == "/api/run":
+                self._ok(self._run(conn, body))
             elif url.path == "/api/edit_refine":
                 self._ok(self._edit_refine(conn, body))
             elif url.path == "/api/approve_post":
                 self._ok(self._approve(conn, body))
+            elif url.path == "/api/export":
+                self._ok(self._export(conn, body))
             else:
                 self._err(404, f"no route {url.path}")
         except refinement.RefinementCapReached:
@@ -146,6 +150,35 @@ class Handler(BaseHTTPRequestHandler):
         picked = angle_engine.pick_angle(conn, angle)
         return {"picked": picked.to_dict(),
                 "next": f"python3 -m pipeline run {angle.angle_id}"}
+
+    def _run(self, conn, body: dict) -> dict:
+        # Angle -> writer/reviewer loop -> draft awaiting edit. Mirrors
+        # `pipeline run`; run_pipeline never publishes. The UI goes straight
+        # from selection to here, so this click IS the pick: record it.
+        from . import orchestrator
+        angle_id = str(body["angle_id"])
+        angle = db.get_angle(conn, angle_id)
+        if not angle:
+            raise KeyError(f"no angle {angle_id}")
+        angle_engine.pick_angle(conn, angle)
+        return orchestrator.run_pipeline(conn, angle_id)
+
+    def _export(self, conn, body: dict) -> dict:
+        # Mirrors `pipeline export`: repurpose if needed, then assemble the
+        # draft bundle. There is no publish path; export writes local files.
+        from . import export as export_mod
+        from . import llm, repurpose
+        from .runlog import log_step
+        post_id = str(body["post_id"])
+        run_id = S.new_id()
+        if not db.get_repurposed(conn, post_id):
+            repurpose.repurpose(conn, post_id, llm.LLMClient(run_id=run_id))
+            log_step(conn, run_id, "repurpose", post_id,
+                     output_ref="linkedin_extract+notes_hook")
+        bundle, out_dir = export_mod.export_bundle(conn, post_id)
+        log_step(conn, run_id, "export", post_id, output_ref=str(out_dir),
+                 pass_fail=True)
+        return {"bundle": bundle.to_dict(), "out_dir": str(out_dir)}
 
     def _edit_refine(self, conn, body: dict) -> dict:
         # Wired in Phase 2 (edit-stage refinement reuses the same session

@@ -3,6 +3,21 @@
 One note per phase, newest at the top. Written during the initial build
 session; future sessions should keep appending here.
 
+## UI overhaul + checker lexicon (2026-07-07, from Snow's files)
+
+Applied Snow's redesigned single-page UI (staged flow: Suggestions ->
+Angle -> Draft -> Export, offline sample mode when the server is down) and
+wired the two routes it needed, /api/run and /api/export, so the whole
+pipeline now runs from the browser; the exports panel states plainly that
+nothing is ever published. The banned-lingo and signpost lists moved into a
+CHECKER-LEXICON block in context/brand-voice.md as the single source of
+truth; reviewer.py parses it live with cached fallbacks. Three integration
+fixes on top of the drop: the UI now threads the edit session id (cap
+accounting starts on turn one), guards the cap-reached response (was
+blanking the draft to "undefined"), and /api/run records PickedAngle since
+the UI skips the separate pick step. 65 tests green, goldens re-run clean
+after the voice-file change, full UI flow smoke-tested capture to bundle.
+
 ## Phase 6 — Golden fixtures + pass-rate script (2026-07-06)
 
 Nine fixtures, 3 per pillar, all five formats covered, each with a real

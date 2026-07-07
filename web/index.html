@@ -3,274 +3,406 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>sunny — content pipeline</title>
+<title>sunny</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  :root { --bg:#14161a; --panel:#1d2026; --ink:#e8e6e1; --dim:#9a978f;
-          --accent:#e8b04b; --line:#2c3038; --ok:#7bb673; --bad:#c96f5f; }
-  * { box-sizing:border-box; }
-  body { margin:0; font:15px/1.5 system-ui, sans-serif; background:var(--bg);
-         color:var(--ink); }
-  header { padding:14px 22px; border-bottom:1px solid var(--line);
-           display:flex; align-items:baseline; gap:12px; }
-  header h1 { font-size:17px; margin:0; }
-  header span { color:var(--dim); font-size:13px; }
-  main { max-width:980px; margin:0 auto; padding:20px; display:grid; gap:20px; }
-  section { background:var(--panel); border:1px solid var(--line);
-            border-radius:10px; padding:16px 18px; }
-  h2 { font-size:14px; text-transform:uppercase; letter-spacing:.06em;
-       color:var(--dim); margin:0 0 12px; }
-  textarea, input[type=text] { width:100%; background:var(--bg); color:var(--ink);
-      border:1px solid var(--line); border-radius:8px; padding:9px 11px;
-      font:inherit; }
-  textarea { min-height:70px; resize:vertical; }
-  button { background:var(--accent); color:#14161a; border:0; border-radius:8px;
-           padding:8px 14px; font:inherit; font-weight:600; cursor:pointer; }
-  button.ghost { background:transparent; color:var(--accent);
-                 border:1px solid var(--accent); }
-  button:disabled { opacity:.45; cursor:default; }
-  .item { border:1px solid var(--line); border-radius:8px; padding:10px 12px;
-          margin:8px 0; }
-  .item .meta { color:var(--dim); font-size:12.5px; margin-top:4px; }
-  .angle.picked { border-color:var(--ok); }
-  .pill { display:inline-block; font-size:11.5px; padding:1px 8px;
-          border:1px solid var(--line); border-radius:999px; color:var(--dim);
-          margin-right:6px; }
-  .chat { display:flex; flex-direction:column; gap:8px; margin:10px 0; }
-  .msg { padding:8px 12px; border-radius:10px; max-width:85%;
-         white-space:pre-wrap; }
-  .msg.you { align-self:flex-end; background:#2a3140; }
-  .msg.engine { align-self:flex-start; background:#232720; }
-  .row { display:flex; gap:8px; margin-top:8px; }
-  .row input { flex:1; }
-  .notice { color:var(--accent); font-size:13.5px; margin-top:8px; }
-  .error { color:var(--bad); font-size:13.5px; margin-top:8px; }
-  .dim { color:var(--dim); }
-  pre.draft { white-space:pre-wrap; font:inherit; background:var(--bg);
-              border:1px solid var(--line); border-radius:8px; padding:12px; }
+  :root{
+    --peach:#FBE3D3; --rose:#F6D2E0; --lilac:#E4DCF5; --sky:#DCE7F5;
+    --ink:#3A3355; --muted:#7C7591; --faint:#A49FB6;
+    --coral:#F0806A; --coral-deep:#E4674F;
+    --glass:rgba(255,255,255,0.46);
+    --glass-strong:rgba(255,255,255,0.66);
+    --border:rgba(255,255,255,0.7);
+    --shadow:0 12px 40px -12px rgba(90,70,120,0.28);
+    --radius:24px;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; color:var(--ink);
+    font-family:Inter,system-ui,sans-serif; font-size:15px; line-height:1.55;
+    background:linear-gradient(135deg,var(--peach) 0%,var(--rose) 34%,var(--lilac) 68%,var(--sky) 100%) fixed;
+    -webkit-font-smoothing:antialiased; min-height:100%;
+  }
+  .sun{
+    position:fixed; top:-9vh; left:34vw; width:46vw; height:46vw; max-width:640px; max-height:640px;
+    pointer-events:none; z-index:0;
+    background:radial-gradient(circle at center,rgba(255,214,170,0.85) 0%,rgba(246,168,150,0.42) 34%,rgba(246,168,150,0) 66%);
+    filter:blur(8px); animation:breathe 11s ease-in-out infinite;
+  }
+  @keyframes breathe{0%,100%{transform:scale(1);opacity:.9}50%{transform:scale(1.08);opacity:1}}
+  @media (prefers-reduced-motion:reduce){.sun{animation:none}}
+
+  .shell{position:relative; z-index:1; display:grid; grid-template-columns:220px 1fr; min-height:100vh}
+  .rail{padding:30px 22px; display:flex; flex-direction:column; gap:34px}
+  .brand{display:flex; align-items:center; gap:10px; font-weight:600; font-size:20px; letter-spacing:-.02em}
+  .brand .dot{width:20px; height:20px; border-radius:50%; background:radial-gradient(circle at 32% 30%,#FFE0B0,#F0806A 78%); box-shadow:0 0 16px rgba(240,128,106,.6)}
+  .stages{display:flex; flex-direction:column; gap:2px}
+  .stages .lbl{font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin-bottom:10px}
+  .stage{display:flex; align-items:center; gap:11px; padding:9px 10px; border-radius:13px; color:var(--muted); font-size:13.5px; transition:.25s}
+  .stage .pip{width:8px; height:8px; border-radius:50%; background:var(--faint); flex:none; transition:.25s}
+  .stage.done{color:var(--ink)} .stage.done .pip{background:var(--coral)}
+  .stage.active{background:var(--glass); color:var(--ink); font-weight:500}
+  .stage.active .pip{background:var(--coral); box-shadow:0 0 0 4px rgba(240,128,106,.22)}
+
+  .main{padding:44px 46px 80px; max-width:1040px}
+  .hello{font-family:Fraunces,serif; font-weight:300; font-size:38px; line-height:1.15; letter-spacing:-.01em; margin:6px 0 4px}
+  .hello b{font-weight:500}
+  .sub{color:var(--muted); margin:0 0 26px}
+
+  .card{background:var(--glass); backdrop-filter:blur(22px) saturate(1.15); -webkit-backdrop-filter:blur(22px) saturate(1.15); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow)}
+  .capture{padding:8px 8px 8px 22px; display:flex; align-items:center; gap:12px; margin-bottom:34px}
+  .capture input{flex:1; border:0; background:transparent; font:inherit; color:var(--ink); padding:14px 0; outline:none}
+  .capture input::placeholder{color:var(--faint)}
+  .btn{border:0; cursor:pointer; font:inherit; font-weight:500; border-radius:16px; padding:12px 20px; transition:.2s; color:#fff; background:linear-gradient(135deg,#F79A78,var(--coral-deep)); box-shadow:0 8px 20px -8px rgba(228,103,79,.7)}
+  .btn:hover{transform:translateY(-1px); box-shadow:0 12px 24px -8px rgba(228,103,79,.8)}
+  .btn:active{transform:translateY(0)}
+  .btn.ghost{background:var(--glass-strong); color:var(--ink); box-shadow:none; border:1px solid var(--border)}
+  .btn.ghost:hover{background:#fff}
+  .btn:disabled{opacity:.5; cursor:default; transform:none; box-shadow:none}
+
+  .sectlabel{font-size:12px; letter-spacing:.13em; text-transform:uppercase; color:var(--muted); margin:30px 2px 14px}
+  .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(258px,1fr)); gap:16px}
+  .sugg{padding:20px 20px 18px; cursor:pointer; transition:.22s; position:relative; overflow:hidden}
+  .sugg:hover{transform:translateY(-3px); box-shadow:0 20px 44px -16px rgba(90,70,120,.4)}
+  .sugg::before{content:""; position:absolute; inset:0 auto 0 0; width:4px; background:var(--coral); opacity:.5}
+  .sugg.build::before{background:#F5A85E} .sugg.ship::before{background:#7CA9E8} .sugg.transition::before{background:#B58FDB}
+  .chip{display:inline-block; font-size:11px; font-weight:500; padding:3px 10px; border-radius:20px; color:var(--ink); background:var(--glass-strong); border:1px solid var(--border)}
+  .chip.rat{color:var(--muted); background:transparent; border:1px dashed var(--faint); margin-left:6px}
+  .sugg h3{margin:12px 0 7px; font-size:16px; font-weight:600; line-height:1.3; letter-spacing:-.01em}
+  .sugg p{margin:0; color:var(--muted); font-size:13.5px}
+  .src{margin-top:11px; font-size:12px; color:var(--faint)}
+  .src a{color:var(--coral-deep); text-decoration:none} .src a:hover{text-decoration:underline}
+
+  .panel{display:none; animation:rise .4s ease both}
+  .panel.active{display:block}
+  @keyframes rise{from{opacity:0; transform:translateY(10px)}to{opacity:1; transform:none}}
+  .back{background:none; border:0; color:var(--muted); font:inherit; cursor:pointer; padding:4px 0; margin-bottom:12px}
+  .back:hover{color:var(--ink)}
+
+  .angle{padding:20px 22px; cursor:pointer; transition:.2s}
+  .angle:hover{transform:translateY(-2px)}
+  .angle.sel{outline:2px solid var(--coral); outline-offset:-1px}
+  .angle h3{margin:10px 0 6px; font-size:17px; font-weight:600; letter-spacing:-.01em}
+  .angle p{margin:0; color:var(--muted); font-size:14px}
+  .angle .why{margin-top:10px; font-size:12.5px; color:var(--faint); font-style:italic}
+
+  .convo{margin-top:18px; padding:18px 20px}
+  .turns{font-size:12px; color:var(--muted); float:right}
+  .convo .row{display:flex; gap:10px; margin-top:12px}
+  .convo input{flex:1; border:1px solid var(--border); background:var(--glass-strong); border-radius:14px; padding:11px 14px; font:inherit; color:var(--ink); outline:none}
+  .convo input:focus{border-color:var(--coral)}
+
+  .draft{padding:30px 34px; margin-bottom:16px; white-space:pre-wrap; font-size:15.5px; line-height:1.72; max-height:52vh; overflow:auto}
+  .actions{display:flex; gap:12px; flex-wrap:wrap; align-items:center}
+  .note{padding:16px 20px; margin:14px 0; font-size:13.5px; color:var(--muted)}
+  .note.warn{border:1px solid rgba(228,103,79,.4)}
+  .note code{background:var(--glass-strong); padding:1px 6px; border-radius:6px}
+  .done-wrap{padding:40px 36px; text-align:center}
+  .done-wrap .glow{width:64px; height:64px; margin:0 auto 18px; border-radius:50%; background:radial-gradient(circle at 34% 30%,#FFE2B4,#F0806A 80%); box-shadow:0 0 34px rgba(240,128,106,.55)}
+  .done-wrap h2{font-family:Fraunces,serif; font-weight:400; font-size:26px; margin:0 0 8px}
+  .path{font-family:ui-monospace,Menlo,monospace; font-size:12.5px; color:var(--muted); background:var(--glass-strong); border:1px solid var(--border); border-radius:12px; padding:10px 14px; margin:16px auto 6px; display:inline-block}
+
+  .spin{width:16px;height:16px;border-radius:50%;border:2px solid rgba(255,255,255,.5);border-top-color:var(--coral);display:inline-block;animation:sp .7s linear infinite;vertical-align:-3px;margin-right:8px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .empty{color:var(--muted); padding:20px 2px; font-size:14px}
+
+  @media (max-width:820px){
+    .shell{grid-template-columns:1fr}
+    .rail{flex-direction:row; align-items:center; justify-content:space-between; padding:18px 22px; gap:16px}
+    .stages{flex-direction:row; align-items:center} .stages .lbl{display:none}
+    .stage span.t{display:none} .stage{padding:8px}
+    .main{padding:28px 22px 60px} .hello{font-size:30px}
+  }
+  :focus-visible{outline:2px solid var(--coral-deep); outline-offset:2px; border-radius:6px}
 </style>
 </head>
 <body>
-<header><h1>sunny</h1><span>drafts only, never publishes</span></header>
-<main>
+<div class="sun" aria-hidden="true"></div>
+<div class="shell">
+  <aside class="rail">
+    <div class="brand"><span class="dot"></span>sunny</div>
+    <nav class="stages">
+      <div class="lbl">Flow</div>
+      <div class="stage active" data-stage="home"><span class="pip"></span><span class="t">Suggestions</span></div>
+      <div class="stage" data-stage="angles"><span class="pip"></span><span class="t">Angle</span></div>
+      <div class="stage" data-stage="draft"><span class="pip"></span><span class="t">Draft</span></div>
+      <div class="stage" data-stage="done"><span class="pip"></span><span class="t">Export</span></div>
+    </nav>
+  </aside>
 
-  <section>
-    <h2>Capture a topic</h2>
-    <textarea id="cap-text" placeholder="Drop a topic, a note, a half-thought..."></textarea>
-    <div class="row"><button onclick="capture()">Capture</button></div>
-    <div id="cap-out" class="notice"></div>
-  </section>
+  <main class="main">
+    <section class="panel active" id="p-home">
+      <h1 class="hello">Good morning, Snow.<br><b>What's worth writing today?</b></h1>
+      <p class="sub">Pick a suggestion below, or start from a thought of your own.</p>
+      <div class="card capture">
+        <input id="captureInput" placeholder="Drop a topic, a build note, a half-formed thought…" autocomplete="off">
+        <button class="btn" id="captureBtn">Explore angles</button>
+      </div>
+      <div id="connBanner"></div>
+      <div class="sectlabel">From your projects</div>
+      <div class="grid" id="projGrid"><div class="empty">Loading…</div></div>
+      <div class="sectlabel">From the landscape</div>
+      <div class="grid" id="landGrid"><div class="empty">Loading…</div></div>
+    </section>
 
-  <section>
-    <h2>Researcher suggestions <span class="dim" id="sugg-when"></span></h2>
-    <div id="suggestions" class="dim">Run <code>python3 -m pipeline research</code> (or wait for the daily cron), then reload.</div>
-  </section>
+    <section class="panel" id="p-angles">
+      <button class="back" data-goto="home">← back to suggestions</button>
+      <h1 class="hello" style="font-size:28px">Three ways in</h1>
+      <p class="sub" id="angleSourceLine"></p>
+      <div class="grid" id="angleGrid" style="grid-template-columns:1fr"></div>
+      <div class="card convo" id="angleConvo" style="display:none">
+        <span class="turns" id="angleTurns"></span>
+        <strong style="font-size:14px">Refine together</strong>
+        <div id="angleFeedback" style="font-size:13.5px;color:var(--muted);margin-top:8px"></div>
+        <div class="row">
+          <input id="angleMsg" placeholder="e.g. combine 1 and 3, angle it for solo builders…">
+          <button class="btn ghost" id="angleRefineBtn">Send</button>
+        </div>
+      </div>
+      <div style="margin-top:20px" id="angleActions"></div>
+    </section>
 
-  <section>
-    <h2>Notes</h2>
-    <div id="notes" class="dim">loading…</div>
-  </section>
+    <section class="panel" id="p-draft">
+      <button class="back" data-goto="angles">← back to angles</button>
+      <div id="draftBody"></div>
+    </section>
 
-  <section id="angles-section" style="display:none">
-    <h2>Angles <span class="dim" id="angles-note"></span></h2>
-    <div id="angles"></div>
-    <div class="chat" id="angle-chat"></div>
-    <div class="row">
-      <input type="text" id="refine-text"
-             placeholder="Refine in plain language: combine 2 and 3, angle it for solo builders…">
-      <button onclick="refineAngle()" id="refine-btn">Send</button>
-    </div>
-    <div id="angle-notice" class="notice"></div>
-  </section>
+    <section class="panel" id="p-done">
+      <div class="card done-wrap">
+        <div class="glow" aria-hidden="true"></div>
+        <h2>Draft bundle ready</h2>
+        <p class="sub" style="margin:0 auto;max-width:380px">Everything's assembled as a draft. Nothing was published, that part stays yours, on your own accounts, when you're ready.</p>
+        <div class="path" id="donePath"></div>
+        <p style="font-size:13px;color:var(--muted)" id="doneContents"></p>
+        <div style="margin-top:22px"><button class="btn" data-goto="home">Write another</button></div>
+      </div>
+    </section>
+  </main>
+</div>
 
-  <section id="edit-section" style="display:none">
-    <h2>Edit draft <span class="dim" id="edit-post"></span></h2>
-    <pre class="draft" id="draft-text"></pre>
-    <div class="chat" id="edit-chat"></div>
-    <div class="row">
-      <input type="text" id="edit-msg"
-             placeholder="Request a change: exclude the paragraph about ___">
-      <button onclick="editRefine()">Send</button>
-      <button class="ghost" onclick="approvePost()">Approve as-is</button>
-    </div>
-    <div id="edit-notice" class="notice"></div>
-  </section>
-
-</main>
 <script>
-let session = null;        // angle refinement session id
-let selectedAngle = null;  // angle_id the refine applies to
-let currentNote = null;
-let editState = null;      // {post_id, session_id}
+const API = window.location.origin;
+const $ = s => document.querySelector(s);
+const state = {sessionId:null, angles:[], selected:null, postId:null, editSession:null, offline:false};
 
-const $ = id => document.getElementById(id);
-const esc = s => String(s ?? "").replace(/[&<>"]/g,
-  c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-
-async function api(path, body) {
-  const opts = body ? {method:"POST", body:JSON.stringify(body),
-                       headers:{"Content-Type":"application/json"}} : {};
-  const r = await fetch(path, opts);
-  const data = await r.json();
-  if (!r.ok) throw new Error(data.error || r.statusText);
-  return data;
+async function api(path, body){
+  const opt = body ? {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)} : {};
+  const r = await fetch(API+path, opt);
+  if(!r.ok){ const e = await r.json().catch(()=>({error:r.statusText})); throw new Error(e.error||('HTTP '+r.status)); }
+  return r.json();
 }
 
-async function capture() {
-  const raw = $("cap-text").value.trim();
-  if (!raw) return;
-  try {
-    const note = await api("/api/capture", {raw_text: raw});
-    $("cap-text").value = "";
-    $("cap-out").textContent = "captured " + note.note_id.slice(0,8);
-    loadNotes();
-  } catch (e) { $("cap-out").textContent = e.message; }
+const order = ['home','angles','draft','done'];
+function goto(stage){
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  $('#p-'+stage).classList.add('active');
+  const idx = order.indexOf(stage);
+  document.querySelectorAll('.stage').forEach(s=>{
+    const i = order.indexOf(s.dataset.stage);
+    s.classList.toggle('active', i===idx);
+    s.classList.toggle('done', i<idx);
+  });
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+document.addEventListener('click', e=>{ const g = e.target.closest('[data-goto]'); if(g) goto(g.dataset.goto); });
+
+const SAMPLE = {
+  project_suggestions:[
+    {note_id:'s1', raw_text:'The reviewer now reads banned words from one file instead of two. Small change, real relief.', source:'project_scan'},
+    {note_id:'s2', raw_text:'Bounded the refinement loop to five turns after watching myself bikeshed with an endlessly patient model.', source:'project_scan'}
+  ],
+  landscape_suggestions:[
+    {note_id:'s3', raw_text:'A new agent framework shipped this week. How you would actually fold it into an existing project, not a greenfield demo.', source:'landscape_scan', source_url:'https://example.com'}
+  ]
+};
+function pillarClass(txt){
+  const t=(txt||'').toLowerCase();
+  if(/ship|tool|framework|workflow/.test(t)) return 'ship';
+  if(/year|pivot|transition|career|remote/.test(t)) return 'transition';
+  return 'build';
+}
+function suggCard(n){
+  const cls = pillarClass(n.raw_text);
+  const src = n.source_url ? `<div class="src">landscape · <a href="${n.source_url}" target="_blank" rel="noopener">source</a></div>`
+                           : `<div class="src">${n.source==='project_scan'?'from your project docs':'your note'}</div>`;
+  const el = document.createElement('div');
+  el.className = `card sugg ${cls}`;
+  el.innerHTML = `<span class="chip">${cls==='ship'?'AI for shippers':cls==='transition'?'Transition':'Build in public'}</span>
+    <h3>${escapeHtml(firstLine(n.raw_text))}</h3><p>${escapeHtml(rest(n.raw_text))}</p>${src}`;
+  el.onclick = ()=> exploreAngles(n.note_id, firstLine(n.raw_text));
+  return el;
+}
+function firstLine(t){ t=(t||'').trim(); const i=t.indexOf('.'); return i>0&&i<90?t.slice(0,i+1):t.slice(0,90); }
+function rest(t){ t=(t||'').trim(); const i=t.indexOf('.'); return i>0&&i<90?t.slice(i+1).trim():''; }
+function escapeHtml(s){ return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+async function loadSuggestions(){
+  let data;
+  try{ data = await api('/api/suggestions'); }
+  catch(err){
+    state.offline = true;
+    $('#connBanner').innerHTML = `<div class="card note warn">Backend not connected, so this is a sample view of the layout. Start the local server (<code>python3 -m pipeline serve</code>) and reload to work with real suggestions.</div>`;
+    data = SAMPLE;
+  }
+  render('#projGrid', data.project_suggestions, 'No project suggestions yet. Run research, or write your own above.');
+  render('#landGrid', data.landscape_suggestions, 'Nothing from the landscape yet. It appears here after the next scan.');
+}
+function render(sel, items, emptyMsg){
+  const g = $(sel); g.innerHTML='';
+  if(!items || !items.length){ g.innerHTML = `<div class="empty">${emptyMsg}</div>`; return; }
+  items.forEach(n=> g.appendChild(suggCard(n)));
 }
 
-async function loadSuggestions() {
-  try {
-    const s = await api("/api/suggestions");
-    if (s.generated_at) $("sugg-when").textContent = "as of " + s.generated_at;
-    const all = [...(s.project_suggestions||[]), ...(s.landscape_suggestions||[])];
-    if (!all.length) return;
-    $("suggestions").innerHTML = all.map(n => `
-      <div class="item">
-        <span class="pill">${esc(n.source)}</span>${esc(n.raw_text.slice(0,220))}
-        ${n.source_url ? `<div class="meta"><a href="${esc(n.source_url)}" target="_blank" style="color:var(--dim)">${esc(n.source_url)}</a></div>` : ""}
-        <div class="row"><button class="ghost" onclick="genAngles('${n.note_id}')">Generate angles</button></div>
-      </div>`).join("");
-  } catch (e) { /* leave the hint text */ }
-}
+$('#captureBtn').onclick = async ()=>{
+  const txt = $('#captureInput').value.trim(); if(!txt) return;
+  if(state.offline){ return exploreAngles('s-demo', firstLine(txt), true); }
+  try{ const note = await api('/api/capture', {raw_text:txt}); exploreAngles(note.note_id, firstLine(txt)); }
+  catch(e){ alert(e.message); }
+};
+$('#captureInput').addEventListener('keydown', e=>{ if(e.key==='Enter') $('#captureBtn').click(); });
 
-async function loadNotes() {
-  try {
-    const notes = await api("/api/notes");
-    $("notes").innerHTML = notes.length ? notes.slice(0, 20).map(n => `
-      <div class="item">
-        <span class="pill">${esc(n.source)}</span>${esc(n.raw_text.slice(0,180))}
-        <div class="row"><button class="ghost" onclick="genAngles('${n.note_id}')">Generate angles</button></div>
-      </div>`).join("") : "No notes yet. Capture one above.";
-  } catch (e) { $("notes").textContent = e.message; }
+const DEMO_ANGLES = [
+  {angle_id:'a1', pillar:'build_in_public', title:'The call I got wrong first', hook:'I built the banned-word check twice because the first version hid the rule in code.', strategic_rationale:'immediate_credibility', rationale:'Shows judgment through a real mistake.'},
+  {angle_id:'a2', pillar:'ai_for_shippers', title:'One file, not two', hook:'Where your config actually lives decides whether "quick edit" stays quick.', strategic_rationale:'long_term_bet', rationale:'A practical single-source-of-truth lesson.'},
+  {angle_id:'a3', pillar:'transition_story', title:'Fifteen years of knowing where things hide', hook:'The instinct to distrust duplicated truth is older than any framework.', strategic_rationale:'immediate_credibility', rationale:'Ties the fix to long delivery experience.'}
+];
+async function exploreAngles(noteId, srcLine, demo){
+  goto('angles');
+  $('#angleSourceLine').textContent = srcLine ? `From: ${srcLine}` : '';
+  $('#angleGrid').innerHTML = `<div class="empty"><span class="spin"></span>Thinking through the angles…</div>`;
+  $('#angleConvo').style.display='none'; $('#angleActions').innerHTML=''; state.selected=null;
+  let res;
+  if(state.offline || demo){ res = {session_id:'demo', angles:DEMO_ANGLES, turns_remaining:5}; }
+  else{
+    try{ res = await api('/api/generate_angles', {note_id:noteId}); }
+    catch(e){ $('#angleGrid').innerHTML = `<div class="card note warn">Couldn't generate angles: ${e.message}</div>`; return; }
+  }
+  state.sessionId = res.session_id; state.angles = res.angles;
+  drawAngles(res.turns_remaining);
 }
+function pillLabel(p){ return {build_in_public:'Build in public', ai_for_shippers:'AI for shippers', transition_story:'Transition'}[p]||p; }
+function ratLabel(r){ return (r||'').replace(/_/g,' '); }
+function drawAngles(turns){
+  const g = $('#angleGrid'); g.innerHTML='';
+  state.angles.forEach(a=>{
+    const el = document.createElement('div');
+    el.className='card angle'+(state.selected===a.angle_id?' sel':'');
+    el.innerHTML = `<span class="chip">${pillLabel(a.pillar)}</span><span class="chip rat">${ratLabel(a.strategic_rationale)}</span>
+      <h3>${escapeHtml(a.title)}</h3><p>${escapeHtml(a.hook)}</p><div class="why">${escapeHtml(a.rationale||'')}</div>`;
+    el.onclick = ()=> selectAngle(a.angle_id);
+    g.appendChild(el);
+  });
+  $('#angleConvo').style.display='block';
+  $('#angleTurns').textContent = (turns!=null? turns+' refinements left' : '');
+}
+function selectAngle(id){
+  state.selected = id;
+  document.querySelectorAll('#angleGrid .angle').forEach((el,i)=> el.classList.toggle('sel', state.angles[i].angle_id===id));
+  $('#angleActions').innerHTML = `<button class="btn" id="runBtn">Write this draft →</button>`;
+  $('#runBtn').onclick = runDraft;
+}
+$('#angleRefineBtn').onclick = async ()=>{
+  const msg = $('#angleMsg').value.trim(); if(!msg) return;
+  const base = state.selected || (state.angles[0]&&state.angles[0].angle_id);
+  $('#angleFeedback').innerHTML = `<span class="spin"></span>Reworking…`;
+  if(state.offline){ $('#angleFeedback').textContent='Sample mode: refinement runs against the live backend.'; $('#angleMsg').value=''; return; }
+  try{
+    const res = await api('/api/refine_angle', {session_id:state.sessionId, angle_id:base, message:msg});
+    if(res.cap_reached || res.prompt){ $('#angleFeedback').textContent = res.prompt || 'Refinement cap reached. Lock one in, or start fresh.'; }
+    else{
+      const i = state.angles.findIndex(a=>a.angle_id===base);
+      if(i>=0) state.angles[i] = res.angle; else state.angles.push(res.angle);
+      state.selected = res.angle.angle_id;
+      $('#angleFeedback').textContent = 'Revised. Take a look.';
+      drawAngles(res.turns_remaining); selectAngle(res.angle.angle_id);
+    }
+    $('#angleMsg').value='';
+  }catch(e){ $('#angleFeedback').textContent = e.message; }
+};
+$('#angleMsg').addEventListener('keydown', e=>{ if(e.key==='Enter') $('#angleRefineBtn').click(); });
 
-function renderAngles(angles) {
-  $("angles").innerHTML = angles.map((a, i) => `
-    <div class="item angle ${selectedAngle===a.angle_id?"picked":""}" id="angle-${a.angle_id}">
-      <strong>${i+1}. ${esc(a.title)}</strong>
-      <div>${esc(a.hook)}</div>
-      <div class="meta">
-        <span class="pill">${esc(a.pillar)}</span>
-        <span class="pill">${esc(a.format)}</span>
-        <span class="pill">${esc(a.strategic_rationale)}</span>
-        ${esc(a.rationale)}
-      </div>
+const DEMO_DRAFT = `The call I got wrong first
+
+I built the banned-word check twice. The first version worked fine and I still tore it out.
+
+The problem was where the rule lived. The checker knew "no em dashes" because I had typed "no em dashes" into the checker. The brand guide also said it, in its own words, in its own file. Two sources, quietly drifting.
+
+That didn't work out the way I wanted, but here's what I learned: the second place a rule lives is the place you forget to update. So the lists moved into the one file I already edit for everything else, and the checker started reading from there.
+
+I'm not sure if you'd agree, but the boring plumbing decisions are the ones that decide whether "quick edit" stays quick six months later.`;
+async function runDraft(){
+  goto('draft');
+  $('#draftBody').innerHTML = `<div class="card draft"><span class="spin"></span>Writing, then running it past the reviewer…</div>`;
+  if(state.offline){ state.postId='demo'; return showDraft(DEMO_DRAFT, 5); }
+  try{
+    const res = await api('/api/run', {angle_id:state.selected});
+    if(res.status==='escalated'){ return showEscalation(res); }
+    state.postId = res.post_id;
+    const d = await api('/api/edit_refine', {post_id:res.post_id});
+    state.editSession = d.session_id;
+    showDraft(d.draft_text, d.turns_remaining);
+  }catch(e){ $('#draftBody').innerHTML = `<div class="card note warn">${e.message}</div>`; }
+}
+function showEscalation(res){
+  $('#draftBody').innerHTML = `<div class="card note warn"><strong>The reviewer sent this back.</strong><br>${escapeHtml(res.fail_reason||'')}<br><br>
+    It tried a couple of times and wanted your eyes rather than guessing again.</div>
+    <div class="actions"><button class="btn ghost" data-goto="angles">Try a different angle</button></div>`;
+}
+function showDraft(text, turns){
+  $('#draftBody').innerHTML = `
+    <div class="card draft" id="draftText">${escapeHtml(text)}</div>
+    <div class="card convo">
+      <span class="turns" id="editTurns">${turns!=null?turns+' edits left':''}</span>
+      <strong style="font-size:14px">Ask for a change</strong>
+      <div id="editFeedback" style="font-size:13.5px;color:var(--muted);margin-top:8px"></div>
       <div class="row">
-        <button class="ghost" onclick="selectAngle('${a.angle_id}')">Refine this one</button>
-        <button onclick="pickAngle('${a.angle_id}')">Pick, proceed</button>
+        <input id="editMsg" placeholder="e.g. cut the second paragraph, warm up the ending…">
+        <button class="btn ghost" id="editBtn">Send</button>
       </div>
-    </div>`).join("");
+    </div>
+    <div class="actions">
+      <button class="btn" id="approveBtn">Approve &amp; export draft →</button>
+      <span style="font-size:13px;color:var(--muted)">Export writes local draft files. It never publishes.</span>
+    </div>`;
+  $('#editBtn').onclick = editDraft;
+  $('#editMsg').addEventListener('keydown', e=>{ if(e.key==='Enter') editDraft(); });
+  $('#approveBtn').onclick = approveExport;
+}
+async function editDraft(){
+  const msg = $('#editMsg').value.trim(); if(!msg) return;
+  $('#editFeedback').innerHTML = `<span class="spin"></span>Revising just that…`;
+  if(state.offline){ $('#editFeedback').textContent='Sample mode: edits run against the live backend.'; return; }
+  try{
+    const res = await api('/api/edit_refine', {post_id:state.postId, session_id:state.editSession, message:msg});
+    if(res.cap_reached){ $('#editFeedback').textContent = res.prompt || 'Edit cap reached. Approve, or hand-edit the export.'; return; }
+    state.editSession = res.session_id;
+    $('#draftText').textContent = res.draft_text;
+    $('#editFeedback').textContent = res.prompt || 'Updated.';
+    $('#editMsg').value='';
+    if(res.turns_remaining!=null) $('#editTurns').textContent = res.turns_remaining+' edits left';
+  }catch(e){ $('#editFeedback').textContent = e.message; }
+}
+async function approveExport(){
+  const btn = $('#approveBtn'); btn.disabled=true; btn.innerHTML=`<span class="spin"></span>Assembling…`;
+  if(state.offline){
+    $('#donePath').textContent='exports/demo-bundle/';
+    $('#doneContents').textContent='post.md · linkedin.md · notes-hook.txt · bundle.json';
+    return goto('done');
+  }
+  try{
+    await api('/api/approve_post', {post_id:state.postId});
+    const res = await api('/api/export', {post_id:state.postId});
+    $('#donePath').textContent = res.out_dir;
+    const b = res.bundle;
+    $('#doneContents').textContent = 'post.md · linkedin.md · notes-hook.txt'+(b.image_path?' · image + caption.txt':'')+' · bundle.json';
+    goto('done');
+  }catch(e){ btn.disabled=false; btn.textContent='Approve & export draft →'; alert(e.message); }
 }
 
-async function genAngles(noteId) {
-  currentNote = noteId;
-  $("angles-section").style.display = "";
-  $("angles-note").textContent = "note " + noteId.slice(0,8);
-  $("angle-chat").innerHTML = "";
-  $("angle-notice").textContent = "generating…";
-  try {
-    const out = await api("/api/generate_angles", {note_id: noteId});
-    session = out.session_id;
-    renderAngles(out.angles);
-    selectedAngle = out.angles[0]?.angle_id || null;
-    $("angle-notice").textContent =
-      `refinement turns remaining: ${out.turns_remaining}`;
-    $("angles-section").scrollIntoView({behavior:"smooth"});
-  } catch (e) { $("angle-notice").textContent = e.message; }
-}
-
-function selectAngle(id) {
-  selectedAngle = id;
-  document.querySelectorAll(".angle").forEach(el =>
-    el.classList.toggle("picked", el.id === "angle-"+id));
-}
-
-function addMsg(chatId, who, text) {
-  const div = document.createElement("div");
-  div.className = "msg " + who;
-  div.textContent = text;
-  $(chatId).appendChild(div);
-}
-
-async function refineAngle() {
-  const msg = $("refine-text").value.trim();
-  if (!msg || !session || !selectedAngle) return;
-  addMsg("angle-chat", "you", msg);
-  $("refine-text").value = "";
-  try {
-    const out = await api("/api/refine_angle",
-      {session_id: session, angle_id: selectedAngle, message: msg});
-    if (out.cap_reached) { $("angle-notice").textContent = out.prompt; return; }
-    addMsg("angle-chat", "engine",
-      `${out.angle.title}\n${out.angle.hook}\n[${out.angle.pillar} · ${out.angle.format} · ${out.angle.strategic_rationale}]`);
-    selectedAngle = out.angle.angle_id;
-    renderAngles([out.angle]);
-    $("angle-notice").textContent = out.prompt ? out.prompt :
-      `refinement turns remaining: ${out.turns_remaining}`;
-  } catch (e) { addMsg("angle-chat", "engine", "error: " + e.message); }
-}
-
-async function pickAngle(id) {
-  try {
-    const out = await api("/api/pick_angle", {angle_id: id});
-    $("angle-notice").textContent =
-      "locked in, handing to orchestrator. Run: " + out.next;
-  } catch (e) { $("angle-notice").textContent = e.message; }
-}
-
-// --- edit stage (backed by the orchestrator once a draft exists) -----------
-
-async function editRefine() {
-  const msg = $("edit-msg").value.trim();
-  if (!msg || !editState) return;
-  addMsg("edit-chat", "you", msg);
-  $("edit-msg").value = "";
-  try {
-    const out = await api("/api/edit_refine",
-      {post_id: editState.post_id, session_id: editState.session_id, message: msg});
-    if (out.cap_reached) { $("edit-notice").textContent = out.prompt; return; }
-    editState.session_id = out.session_id;
-    $("draft-text").textContent = out.draft_text;
-    addMsg("edit-chat", "engine", "revised the draft per your note.");
-    $("edit-notice").textContent = out.prompt ? out.prompt :
-      `refinement turns remaining: ${out.turns_remaining}`;
-  } catch (e) { addMsg("edit-chat", "engine", "error: " + e.message); }
-}
-
-async function approvePost() {
-  if (!editState) return;
-  try {
-    const out = await api("/api/approve_post", {post_id: editState.post_id});
-    $("edit-notice").textContent =
-      "approved. repurpose + export: " + (out.next || "done");
-  } catch (e) { $("edit-notice").textContent = e.message; }
-}
-
-// Deep-link: /?post=<post_id> opens the edit panel for a reviewed draft.
-async function maybeOpenEdit() {
-  const postId = new URLSearchParams(location.search).get("post");
-  if (!postId) return;
-  try {
-    const out = await api("/api/edit_refine", {post_id: postId, message: null});
-    editState = {post_id: postId, session_id: out.session_id};
-    $("edit-section").style.display = "";
-    $("edit-post").textContent = "post " + postId.slice(0,8);
-    $("draft-text").textContent = out.draft_text;
-    $("edit-notice").textContent =
-      `refinement turns remaining: ${out.turns_remaining}`;
-    $("edit-section").scrollIntoView();
-  } catch (e) { /* no such post yet */ }
-}
-
-loadSuggestions(); loadNotes(); maybeOpenEdit();
+loadSuggestions();
 </script>
 </body>
 </html>

@@ -83,6 +83,35 @@ evolving." Continuity, not conflict.
   but..." or its spirit.
 - No three or more parallel-structure bullets in a row without variation.
 
+<!-- CHECKER-LEXICON
+The automated mechanical checks in pipeline/reviewer.py read the exact-match
+lists below. This is the ONLY place these word lists live, so editing them
+here is all that is needed to change what the checker flags by exact match.
+Verb-sense rules for "unlock"/"leverage" and the "this is not X, it's Y"
+constructions stay in reviewer.py, because they need regex logic rather than
+a flat word list. One entry per line, lowercase.
+
+[banned_lingo]
+game-changer
+game changer
+supercharge
+paradigm shift
+democratize
+democratise
+transformative
+the future of
+
+[signpost_sentences]
+here's where it gets interesting
+here is where it gets interesting
+here's where it got interesting
+this is the part worth pausing on
+and here's the real kicker
+here's the real kicker
+here's the thing
+let that sink in
+-->
+
 Language that is fine when contextually earned: vibe-coded, mid-flow, ship,
 judgment bottleneck, building in public, ambient, taste (as a quality),
 loop closed.

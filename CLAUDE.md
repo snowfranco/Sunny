@@ -62,8 +62,12 @@ lazy-imported and everything runs in deterministic mock mode when
    the model decision is deliberately open.
 7. Brand-voice hard rules (no em dashes, no "this is not X, it's Y", no
    signpost sentences, banned lingo list) are enforced mechanically in
-   `pipeline/reviewer.py`. Keep the mechanical checks in sync with
-   `context/brand-voice.md` if that file changes, and re-run the golden set.
+   `pipeline/reviewer.py`. The exact-match word lists (banned lingo,
+   signpost sentences) live ONLY in the `CHECKER-LEXICON` block inside
+   `context/brand-voice.md`; the reviewer parses them from there at runtime
+   (with safe fallbacks), so editing that block is how the lists change.
+   Regex-based rules (verb-sense unlock/leverage, "not X but Y") stay in
+   reviewer.py. Re-run the golden set after any change to either.
 
 ## Conventions
 
