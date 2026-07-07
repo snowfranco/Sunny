@@ -14,7 +14,7 @@ import json
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from . import angle_engine, db, refinement
+from . import angle_engine, config, db, refinement
 from . import schemas as S
 from .config import REPO_ROOT, load_config
 
@@ -63,10 +63,15 @@ class Handler(BaseHTTPRequestHandler):
         elif url.path == "/api/suggestions":
             f = self.server.cfg.suggestions_file  # type: ignore[attr-defined]
             if f.exists():
-                self._send(200, f.read_bytes())
+                data = json.loads(f.read_text(encoding="utf-8"))
             else:
-                self._ok({"generated_at": None, "project_suggestions": [],
-                          "landscape_suggestions": []})
+                data = {"generated_at": None, "project_suggestions": [],
+                        "landscape_suggestions": []}
+            # Surface mock mode so the page can say so out loud; a server
+            # started without PIPELINE_MODEL in its shell serves canned
+            # angle/draft output and this is the tell.
+            data["mock_mode"] = config.mock_mode()
+            self._ok(data)
         elif url.path == "/api/notes":
             self._ok([n.to_dict() for n in db.list_notes(conn)])
         elif url.path == "/api/angles":

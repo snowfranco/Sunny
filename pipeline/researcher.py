@@ -87,7 +87,7 @@ def scan_landscape(conn, client: llm.LLMClient | None = None,
     )
     notes: list[S.CaptureNote] = []
     rejected = 0
-    for item in items if isinstance(items, list) else []:
+    for item in llm.unwrap_list(items):
         try:
             note = S.CaptureNote(
                 note_id=S.new_id(),

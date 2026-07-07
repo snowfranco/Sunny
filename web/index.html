@@ -241,7 +241,12 @@ function escapeHtml(s){ return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&
 
 async function loadSuggestions(){
   let data;
-  try{ data = await api('/api/suggestions'); }
+  try{
+    data = await api('/api/suggestions');
+    if(data.mock_mode){
+      $('#connBanner').innerHTML = `<div class="card note warn"><strong>Mock mode.</strong> The server was started without <code>PIPELINE_MODEL</code> in its shell, so angles and drafts are canned templates, not real generations. Stop the server, then in one shell: <code>export PIPELINE_MODEL=…</code> and restart <code>python3 -m pipeline serve</code>.</div>`;
+    }
+  }
   catch(err){
     state.offline = true;
     $('#connBanner').innerHTML = `<div class="card note warn">Backend not connected, so this is a sample view of the layout. Start the local server (<code>python3 -m pipeline serve</code>) and reload to work with real suggestions.</div>`;

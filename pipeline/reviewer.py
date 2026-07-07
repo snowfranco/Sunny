@@ -285,7 +285,7 @@ def judge_subjective(draft_text: str, pillar: str, fmt: str,
             f"BRAND VOICE GUIDE:\n{voice}\n\nDRAFT:\n{draft_text}")
     raw = client.complete_json("review", JUDGE_SYSTEM, user)
     items = []
-    for it in raw if isinstance(raw, list) else []:
+    for it in llm.unwrap_list(raw):
         items.append(S.ChecklistItem(
             criterion=str(it.get("criterion", "unknown")),
             passed=bool(it.get("passed", False)),

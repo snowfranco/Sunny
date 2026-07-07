@@ -64,8 +64,8 @@ def generate_angles(conn, note: S.CaptureNote,
     last_err: Exception | None = None
     for attempt in range(1 + MAX_SCHEMA_RETRIES):
         try:
-            items = client.complete_json("angles", ANGLE_SYSTEM, user)
-            if not isinstance(items, list) or len(items) != 3:
+            items = llm.unwrap_list(client.complete_json("angles", ANGLE_SYSTEM, user))
+            if len(items) != 3:
                 raise S.SchemaError(f"expected 3 angles, got {items!r:.200}")
             angles = [_to_angle(note.note_id, it) for it in items]
             for a in angles:
@@ -90,6 +90,9 @@ def refine_angle(conn, base_angle: S.AngleOption, instruction: str,
     item = client.complete_json("refine_angle", ANGLE_SYSTEM, user)
     if isinstance(item, list):  # tolerate a single-element array
         item = item[0] if item else {}
+    if (isinstance(item, dict) and "title" not in item and len(item) == 1
+            and isinstance(next(iter(item.values())), dict)):
+        item = next(iter(item.values()))  # tolerate {"angle": {...}} wrapping
     angle = _to_angle(base_angle.note_id, item)
     db.save_angle(conn, angle)
     return angle

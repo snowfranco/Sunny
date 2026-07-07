@@ -3,6 +3,9 @@
 - Model comes from PIPELINE_MODEL (env). Deliberately unset by default; the
   model decision is open and gets made after real usage exists. Do not
   hard-code a model id anywhere.
+- Routing is by model-name prefix: "ollama/<name>" calls a local Ollama
+  server (config.ollama_host()), "gemini*" calls Google via
+  google-generativeai, anything else goes to the Anthropic Messages API.
 - Mock mode (PIPELINE_MODEL unset, or PIPELINE_MOCK=1) returns deterministic,
   schema-valid outputs keyed by call `kind`, so the whole pipeline, the test
   suite, and the golden fixtures run offline with no API key.
@@ -10,8 +13,7 @@
   run_id; exceeding the ceiling raises TokenCeilingExceeded.
 
 There is deliberately NO publish capability here or anywhere else: this
-module talks to the Anthropic Messages API only, and only when a real model
-is configured.
+module talks to model APIs only, and only when a real model is configured.
 """
 
 from __future__ import annotations
@@ -85,12 +87,25 @@ class LLMClient:
             return _mock_json(kind, user)
         raw = self._real_call(
             system + "\n\nRespond with valid JSON only. No prose, no fences.",
-            user, max_tokens)
+            user, max_tokens, json_mode=True)
         return _parse_json_reply(raw)
 
-    # -- real API -----------------------------------------------------------
+    # -- real APIs ------------------------------------------------------------
+    # Dispatch by model-name prefix. No default model anywhere: an unset
+    # PIPELINE_MODEL means mock mode, and that stays deliberate.
 
-    def _real_call(self, system: str, user: str, max_tokens: int) -> str:
+    def _real_call(self, system: str, user: str, max_tokens: int,
+                   json_mode: bool = False) -> str:
+        model = config.pipeline_model()
+        if model.startswith("ollama/"):
+            return self._ollama_call(model.removeprefix("ollama/"),
+                                     system, user, max_tokens, json_mode)
+        if model.startswith("gemini"):
+            return self._gemini_call(model, system, user, max_tokens, json_mode)
+        return self._anthropic_call(model, system, user, max_tokens)
+
+    def _anthropic_call(self, model: str, system: str, user: str,
+                        max_tokens: int) -> str:
         if self._client is None:
             try:
                 import anthropic  # lazy: not needed for mock mode / tests
@@ -99,7 +114,6 @@ class LLMClient:
                     "anthropic package not installed; pip install anthropic, "
                     "or unset PIPELINE_MODEL to run in mock mode") from e
             self._client = anthropic.Anthropic()
-        model = config.pipeline_model()
         resp = self._client.messages.create(
             model=model,
             max_tokens=max_tokens,
@@ -112,6 +126,77 @@ class LLMClient:
         else:
             self.budget.charge(_approx_tokens(system + user) + max_tokens)
         return "".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
+
+    def _ollama_call(self, model: str, system: str, user: str,
+                     max_tokens: int, json_mode: bool) -> str:
+        import urllib.error
+        import urllib.request
+        payload = {
+            "model": model,
+            "messages": [{"role": "system", "content": system},
+                         {"role": "user", "content": user}],
+            "stream": False,
+            "options": {"num_predict": max_tokens},
+        }
+        if json_mode:
+            payload["format"] = "json"
+        req = urllib.request.Request(
+            config.ollama_host() + "/api/chat",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=300) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.URLError as e:
+            raise LLMError(
+                f"cannot reach Ollama at {config.ollama_host()} "
+                f"({e}). Is `ollama serve` running in this environment, and "
+                f"is the model pulled (`ollama pull {model}`)?") from e
+        used = int(data.get("prompt_eval_count", 0)) + int(data.get("eval_count", 0))
+        self.budget.charge(used or _approx_tokens(system + user) + max_tokens // 2)
+        return str(data.get("message", {}).get("content", ""))
+
+    def _gemini_call(self, model: str, system: str, user: str,
+                     max_tokens: int, json_mode: bool) -> str:
+        try:
+            import google.generativeai as genai  # lazy, like anthropic
+        except ImportError as e:
+            raise LLMError(
+                "google-generativeai not installed; pip install "
+                "google-generativeai, or pick a different PIPELINE_MODEL") from e
+        api_key = config.gemini_api_key()
+        if not api_key:
+            raise LLMError("set GEMINI_API_KEY (or GOOGLE_API_KEY) to use "
+                           "a gemini model")
+        genai.configure(api_key=api_key)
+        gen_config: dict = {"max_output_tokens": max_tokens}
+        if json_mode:
+            gen_config["response_mime_type"] = "application/json"
+        gmodel = genai.GenerativeModel(model, system_instruction=system)
+        resp = gmodel.generate_content(user, generation_config=gen_config)
+        usage = getattr(resp, "usage_metadata", None)
+        if usage is not None:
+            self.budget.charge(int(getattr(usage, "prompt_token_count", 0))
+                               + int(getattr(usage, "candidates_token_count", 0)))
+        else:
+            self.budget.charge(_approx_tokens(system + user) + max_tokens)
+        return resp.text
+
+
+def unwrap_list(obj) -> list:
+    """Tolerate the common local-model habit of wrapping a JSON array in a
+    single-key object ({"angles": [...]}, {"items": [...]}). Returns the
+    inner list when the shape is unambiguous, else [] for non-lists.
+    Callers still schema-validate every element; this only unwraps."""
+    if isinstance(obj, list):
+        return obj
+    if isinstance(obj, dict):
+        lists = [v for v in obj.values() if isinstance(v, list)]
+        if len(lists) == 1:
+            return lists[0]
+    return []
 
 
 def _parse_json_reply(raw: str):

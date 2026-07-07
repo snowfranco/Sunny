@@ -87,8 +87,27 @@ def load_config(config_file: Path | None = None) -> Config:
 # --- LLM runtime settings (env-driven; model deliberately not hard-coded) --
 
 def pipeline_model() -> str | None:
-    """The runtime model id, or None when unset (mock mode)."""
+    """The runtime model id, or None when unset (mock mode).
+
+    Routing is by prefix (see llm._real_call): "ollama/<name>" targets a
+    local Ollama server, "gemini*" targets Google, anything else goes to
+    the Anthropic API. Unset means mock mode; that default is deliberate."""
     return os.environ.get("PIPELINE_MODEL") or None
+
+
+def ollama_host() -> str:
+    """Base URL of the local Ollama server, for PIPELINE_MODEL=ollama/<name>.
+    OLLAMA_HOST accepts host:port with or without a scheme."""
+    host = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+    if "://" not in host:
+        host = "http://" + host
+    return host.rstrip("/")
+
+
+def gemini_api_key() -> str | None:
+    """API key for PIPELINE_MODEL=gemini*."""
+    return (os.environ.get("GEMINI_API_KEY")
+            or os.environ.get("GOOGLE_API_KEY") or None)
 
 
 def mock_mode() -> bool:

@@ -3,6 +3,20 @@
 One note per phase, newest at the top. Written during the initial build
 session; future sessions should keep appending here.
 
+## Model routing + mock-mode visibility (2026-07-07)
+
+The four handed-over fixes turned out to be three-quarters unapplied: the
+tree was clean at 70c47e3, which had only the lexicon and the run/export
+routes. Now landed: llm.py routes by model prefix (ollama/* to a local
+Ollama at config.ollama_host(), gemini* via google-generativeai, everything
+else Anthropic; unset still means mock, deliberately, with no default model
+anywhere), /api/suggestions carries a mock_mode boolean, and the page shows
+a loud banner when it's true. JSON calls request native JSON mode from
+Ollama/Gemini, and list-shaped replies tolerate the single-key object
+wrapping small local models love, so llama3.1:8b won't burn its retries on
+formatting. Verified live against a stub Ollama on 11434: mock_mode flips
+false and angles reflect the actual topic. 75 tests green, goldens clean.
+
 ## UI overhaul + checker lexicon (2026-07-07, from Snow's files)
 
 Applied Snow's redesigned single-page UI (staged flow: Suggestions ->
