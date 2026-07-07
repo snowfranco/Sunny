@@ -1,7 +1,7 @@
-# sunny — Snow's AI content pipeline
+# sunny — AI content pipeline
 
-Turns real build/work notes into publish-ready Substack and LinkedIn draft
-bundles, in Snow Abad's voice, with a human in the loop at every decision
+Turns real build/work notes into publish-ready draft
+bundles, with a human in the loop at every decision
 point. Single-user, local-first, SQLite-backed. **It never publishes
 anything, anywhere** — export always produces an unpublished draft bundle.
 
