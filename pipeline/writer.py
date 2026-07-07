@@ -49,6 +49,48 @@ def voice_version(context_dir: Path | None = None) -> str:
     return hashlib.sha256(f.read_bytes()).hexdigest()[:12]
 
 
+def _length_guidance(fmt: str) -> str:
+    """A loud, numeric length requirement for the user prompt. Models
+    (small local ones especially) undershoot length targets, so the stated
+    aim sits well above the floor: an undershoot still clears the bound."""
+    bounds = S.LENGTH_BOUNDS.get(fmt)
+    if not bounds:
+        return ""
+    unit, lo, hi = bounds
+    if unit == "words":
+        target = lo + (hi - lo) // 3
+        return (f"\nLENGTH REQUIREMENT, not negotiable: the piece must be "
+                f"between {lo} and {hi} words. Aim for about {target} words. "
+                f"Anything under {lo} words will be rejected by the reviewer, "
+                "so develop each section fully with concrete specifics from "
+                "the source note rather than summarizing.")
+    return (f"\nLENGTH REQUIREMENT, not negotiable: {lo} to {hi} {unit}, "
+            f"no more.")
+
+
+def _feedback_addendum(feedback: str, fmt: str) -> str:
+    """Turn reviewer fail reasons into direct instructions. Length failures
+    get an explicit expand/trim order; small models don't infer it from the
+    raw bound."""
+    text = ("\n\nA reviewer failed the previous draft for these specific "
+            f"reasons; fix them without losing the voice:\n{feedback}")
+    if "length_bounds" in feedback:
+        bounds = S.LENGTH_BOUNDS.get(fmt)
+        if bounds and bounds[0] == "words":
+            _, lo, hi = bounds
+            target = lo + (hi - lo) // 3
+            text += (f"\n\nThe previous draft failed on LENGTH. This time "
+                     f"write the full length: at least {lo} words, aiming "
+                     f"for about {target}. Expand every section with "
+                     "concrete detail from the source note (what happened, "
+                     "what it cost, what changed). Do not pad with filler; "
+                     "add substance.")
+        else:
+            text += ("\n\nThe previous draft failed on LENGTH. Respect the "
+                     "stated bound exactly this time.")
+    return text
+
+
 def _writing_context(context_dir: Path | None = None) -> str:
     d = context_dir or REPO_ROOT / "context"
     parts = []
@@ -70,10 +112,10 @@ def write_draft(conn, angle: S.AngleOption, note: S.CaptureNote,
             f"SOURCE NOTE:\n{note.raw_text}\n"
             + (f"SOURCE URL: {note.source_url}\n" if note.source_url else "")
             + f"\nCONTEXT:\n{_writing_context()}\n\n"
-            f"Write the {angle.format} piece. Reply with the piece only.")
+            f"Write the {angle.format} piece. Reply with the piece only."
+            + _length_guidance(angle.format))
     if feedback:
-        user += ("\n\nA reviewer failed the previous draft for these specific "
-                 f"reasons; fix them without losing the voice:\n{feedback}")
+        user += _feedback_addendum(feedback, angle.format)
         text = client.complete_text("revise_draft", WRITER_SYSTEM, user,
                                     max_tokens=3000)
     else:
@@ -100,7 +142,7 @@ def revise_for_edit(conn, current: S.WriterOutput, instruction: str,
             f"SNOW'S EDIT REQUEST:\n{instruction}\n\n"
             "Apply exactly this change. Keep everything she did not ask you "
             "to change, keep the format rules, reply with the full revised "
-            "piece only.")
+            "piece only." + _length_guidance(current.format))
     text = client.complete_text("revise_draft", WRITER_SYSTEM, user,
                                 max_tokens=3000)
     out = S.WriterOutput(

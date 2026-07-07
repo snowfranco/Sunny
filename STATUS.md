@@ -3,6 +3,19 @@
 One note per phase, newest at the top. Written during the initial build
 session; future sessions should keep appending here.
 
+## Writer length guidance (2026-07-07)
+
+llama3.1:8b was under-writing substack essays (~268 words against the 400
+floor) and the retry loop was replaying the raw fail string, which a small
+model doesn't translate into "add 150 words," so runs escalated on length
+alone. The writer prompt now states the numeric bound loudly and aims well
+above the floor (about 565 words for the 400-900 band, since models
+undershoot their targets), and a length_bounds failure turns into an
+explicit expand order with the floor and target restated. Edit-stage
+revisions carry the same requirement so post-review edits can't shrink a
+draft below the bound. The retry cap stays at 2; a simulated under-writer
+now passes on revision 1. 81 tests green, goldens clean.
+
 ## Model routing + mock-mode visibility (2026-07-07)
 
 The four handed-over fixes turned out to be three-quarters unapplied: the
