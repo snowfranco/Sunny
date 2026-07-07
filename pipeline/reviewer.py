@@ -273,7 +273,11 @@ covering exactly these criteria:
 - claim_traceability: every specific number, project name, or fact traces to
   the provided note/context; nothing invented.
 - pillar_format_consistency: content matches the tagged pillar and the
-  target platform's rules."""
+  target platform's rules.
+Scale the structural criteria to the format. For social_copy (1-3
+sentences) and other very short formats, a single wry, specific observation
+satisfies insight/throwaway/unresolved/door at once; do not fail a short
+piece for lacking essay furniture the format has no room for."""
 
 
 def judge_subjective(draft_text: str, pillar: str, fmt: str,

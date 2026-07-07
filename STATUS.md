@@ -3,6 +3,21 @@
 One note per phase, newest at the top. Written during the initial build
 session; future sessions should keep appending here.
 
+## Per-format writer briefs (2026-07-07)
+
+The social_copy overshoot (7 sentences against a 1-3 cap) was
+self-inflicted: the writer system prompt demanded essay furniture
+(signature phrase, throwaway line, unresolved observation, open last line)
+for every format, and no 1-3 sentence piece can satisfy that checklist, so
+the model sacrificed the length cap. The essay checklist now lives in
+per-format FORMAT_BRIEFS; social copy explicitly waives the essay rules and
+states that a fourth sentence is a failure. Sentence-cap failures turn into
+an explicit "at most N sentences, nothing before or after" order on retry,
+the judge is told to scale structural criteria to the format so it doesn't
+fail short pieces for missing essay elements, and edit-stage revisions
+carry the brief too. Retry cap still 2. Simulated 7-sentence over-writer
+now passes on revision 1. 85 tests green, goldens clean.
+
 ## Writer length guidance (2026-07-07)
 
 llama3.1:8b was under-writing substack essays (~268 words against the 400

@@ -98,6 +98,66 @@ class TestLengthGuidanceInPrompts(unittest.TestCase):
         self.assertIn("between 400 and 900 words", client.prompts[0])
 
 
+class TestFormatBriefs(unittest.TestCase):
+    def test_every_format_has_a_brief(self):
+        self.assertEqual(set(writer.FORMAT_BRIEFS), set(S.FORMATS))
+
+    def test_brief_lands_in_prompt_and_social_forbids_essay_furniture(self):
+        conn = _conn()
+        note = capture.capture_manual(conn, "format brief test")
+        angles = angle_engine.generate_angles(conn, note)
+        social = [a for a in angles if a.format == "social_copy"][0]
+        client = _CapturingClient()
+        writer.write_draft(conn, social, note, client)
+        self.assertIn("FORMAT BRIEF:", client.prompts[0])
+        self.assertIn("1 TO 3 SENTENCES", client.prompts[0])
+        self.assertNotIn("throwaway line:", client.prompts[0].split("FORMAT BRIEF:")[1][:600].lower())
+
+    def test_sentence_overshoot_feedback_orders_the_cap(self):
+        conn = _conn()
+        note = capture.capture_manual(conn, "overshoot test")
+        angles = angle_engine.generate_angles(conn, note)
+        social = [a for a in angles if a.format == "social_copy"][0]
+        client = _CapturingClient()
+        writer.write_draft(conn, social, note, client, post_id="p", revision=1,
+                           feedback="length_bounds: 7 sentences (bound 1-3 "
+                                    "for social_copy)")
+        self.assertIn("1 to 3 sentences TOTAL", client.prompts[0])
+        self.assertIn("at most 3 sentences", client.prompts[0])
+
+
+class _OverWriter(llm.LLMClient):
+    """Writes 7 sentences for social copy until the retry prompt carries the
+    explicit sentence cap, then complies. The llama3.1:8b overshoot mode."""
+
+    LONG = ("I built the thing. It worked. Then it broke. I fixed it again. "
+            "The lesson was clear. I keep thinking about it. What a week.")
+
+    def __init__(self):
+        super().__init__("t")
+
+    def complete_text(self, kind, system, user, max_tokens=2048):
+        if "sentences TOTAL" in user:
+            return ("The hard part was free and the free part was hard. "
+                    "Not sure yet which estimate to stop trusting.")
+        return self.LONG
+
+    def complete_json(self, kind, system, user, max_tokens=2048):
+        return llm._mock_json(kind, user)
+
+
+class TestOverWriterRecoversWithinCap(unittest.TestCase):
+    def test_seven_sentence_social_passes_on_first_retry(self):
+        conn = _conn()
+        note = capture.capture_manual(conn, "overwriter recovery test")
+        angles = angle_engine.generate_angles(conn, note)
+        social = [a for a in angles if a.format == "social_copy"][0]
+        client = _OverWriter()
+        verdict = orchestrator.run_review_loop(conn, social, note, client, "r")
+        self.assertTrue(verdict.passed)
+        self.assertEqual(verdict.revision_count, 1)
+
+
 class TestUnderWriterRecoversWithinCap(unittest.TestCase):
     def test_short_draft_passes_on_first_retry(self):
         conn = _conn()

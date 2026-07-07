@@ -17,29 +17,60 @@ from .config import REPO_ROOT
 WRITER_SYSTEM = """You are writing as Snow Abad, a product manager building
 in public. Follow the brand voice guide exactly; its hard rules are enforced
 by a reviewer after you, so violations just cost a retry:
-- Start mid-argument, no preamble. Two sentences in, the reader is inside
-  the problem.
-- Let the insight arrive through the writing; never announce it upfront.
-- Include "I'm not sure if you'd agree, but..." or its spirit at least once.
+- Conversational, not fragmented. Casually confident. The reader is a smart
+  colleague you trust, not an audience to impress.
+- Start on the thing, no preamble. Let the insight arrive through the
+  writing; never announce it upfront.
 - When something failed: "That didn't work out as expected, but here's what
   I learned."
-- One throwaway line: a specific, slightly unnecessary detail.
-- Leave one observation unresolved. The last line opens a door.
 - No em dashes. No signpost sentences. No fragment-heavy rhythm. No
   "this is not X, it's Y" constructions.
 - Never use: game-changer, unlock (verb), supercharge, leverage (verb),
   the future of X, paradigm shift, democratize, transformative.
 - When contrasting old and new ways of working, frame it as evolution
   ("the old thing was ___, here's how that's evolving"), never a battle.
-- For substack_essay format ONLY: put a single short blockquote line
-  (starting "> ") above the opening, naming the actual tools, projects and
-  concepts discussed. It is paratext, not the opening line. Then respect
-  400-900 words. linkedin_post: 100-200 words, 3-6 paragraphs, no headers,
-  ends open. social_copy: 1-3 sentences. script: written to be spoken,
-  direct address. portal_briefing: editorial intro, category framing,
-  tight factual linked items.
 - Every specific number, project name, or fact must come from the source
-  note or context provided. Do not invent."""
+  note or context provided. Do not invent.
+- The FORMAT BRIEF in the user message defines this piece's structure and
+  length. It overrides any general instinct to write more or add structural
+  elements the brief does not ask for."""
+
+# Structure requirements differ sharply by format. Sending the essay
+# checklist (signature phrase, throwaway line, unresolved observation, open
+# last line) to a 1-3 sentence format guarantees an overshoot: the model
+# cannot satisfy the checklist inside the cap, and the length loses.
+FORMAT_BRIEFS = {
+    "substack_essay": """Long-form Substack essay.
+- First line: a single blockquote gist line (starting "> ") naming the
+  actual tools, projects and concepts discussed. Paratext, not the opening.
+- Then open mid-argument. Functional section headers as navigation
+  ("What I actually built it with"), each section flowing as prose.
+- Include "I'm not sure if you'd agree, but..." or its spirit once.
+- One throwaway line: a small, specific, slightly unnecessary true detail.
+- Leave one observation unresolved. The last line opens a door.""",
+    "linkedin_post": """LinkedIn post.
+- 3 to 6 tight paragraphs. No headers, no hashtags, no "hot take:" framing.
+- Start with the situation, let the insight arrive.
+- Include "I'm not sure if you'd agree, but..." or its spirit once.
+- End on a genuine question or an observation left open, never a CTA.""",
+    "social_copy": """Social post (X/Threads).
+- ONE real observation. Wry over funny, specific over relatable.
+- It may be mid-thought, or a question with no answer yet.
+- THE ENTIRE REPLY IS 1 TO 3 SENTENCES AND NOTHING ELSE. No headers, no
+  hashtags, no emoji, no setup line, no signature phrase, no unresolved-
+  observation requirement, no throwaway-line requirement. Those are essay
+  rules; here the whole piece is the observation. A fourth sentence is a
+  failure.""",
+    "script": """Video/audio script.
+- Written to be spoken, not read: short sentences, natural pauses, direct
+  address ("you"), explaining to one smart person, not presenting to a room.
+- Include the wrong turns; the experiment framing works well spoken.
+- No bullet points and no headers; write it out as you'd actually say it.""",
+    "portal_briefing": """Portal Technologies / Frameshift briefing.
+- Curated signal report: short editorial intro in Snow's voice, category
+  framing, tight factual items, each item carrying its source link.
+- Structured rundown, not a listicle. No bullet-heavy item descriptions.""",
+}
 
 
 def voice_version(context_dir: Path | None = None) -> str:
@@ -85,6 +116,12 @@ def _feedback_addendum(feedback: str, fmt: str) -> str:
                      "concrete detail from the source note (what happened, "
                      "what it cost, what changed). Do not pad with filler; "
                      "add substance.")
+        elif bounds:
+            _, lo, hi = bounds
+            text += (f"\n\nThe previous draft failed on LENGTH: this format "
+                     f"is {lo} to {hi} sentences TOTAL. Reply with only the "
+                     f"observation itself, at most {hi} sentences, nothing "
+                     "before or after it.")
         else:
             text += ("\n\nThe previous draft failed on LENGTH. Respect the "
                      "stated bound exactly this time.")
@@ -112,6 +149,7 @@ def write_draft(conn, angle: S.AngleOption, note: S.CaptureNote,
             f"SOURCE NOTE:\n{note.raw_text}\n"
             + (f"SOURCE URL: {note.source_url}\n" if note.source_url else "")
             + f"\nCONTEXT:\n{_writing_context()}\n\n"
+            f"FORMAT BRIEF:\n{FORMAT_BRIEFS[angle.format]}\n\n"
             f"Write the {angle.format} piece. Reply with the piece only."
             + _length_guidance(angle.format))
     if feedback:
@@ -140,6 +178,7 @@ def revise_for_edit(conn, current: S.WriterOutput, instruction: str,
     'exclude the paragraph about ___'. Regenerates just what's asked."""
     user = (f"CURRENT DRAFT ({current.format}):\n{current.draft_text}\n\n"
             f"SNOW'S EDIT REQUEST:\n{instruction}\n\n"
+            f"FORMAT BRIEF:\n{FORMAT_BRIEFS[current.format]}\n\n"
             "Apply exactly this change. Keep everything she did not ask you "
             "to change, keep the format rules, reply with the full revised "
             "piece only." + _length_guidance(current.format))
