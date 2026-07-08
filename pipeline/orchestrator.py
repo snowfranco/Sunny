@@ -76,8 +76,14 @@ def run_pipeline(conn, angle_id: str) -> dict:
     try:
         verdict = run_review_loop(conn, angle, note, client, run_id)
     except EscalationRequired as e:
+        # The near-miss draft is real and saved. Hand it back so Snow can
+        # fix the flagged lines herself and export, per the brief's
+        # "escalate to Snow with the specific failure reason attached" plus
+        # "direct manual editing stays available." Do not discard it.
+        failed = db.get_latest_draft(conn, e.post_id)
         return {"status": "escalated", "run_id": run_id, "post_id": e.post_id,
                 "fail_reason": e.fail_reason,
+                "draft_text": failed.draft_text if failed else "",
                 "next": "review the draft yourself; the specific failures are attached"}
 
     # Artist scaffold runs alongside the passing draft (Phase 3).

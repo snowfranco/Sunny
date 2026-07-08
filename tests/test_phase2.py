@@ -67,6 +67,15 @@ class TestMechanicalChecks(unittest.TestCase):
             items = reviewer.check_banned_patterns(s)
             self.assertIn("no_not_x_but_y", _fails(items), s)
 
+    def test_plain_contrastive_but_is_not_flagged(self):
+        # "not X, but Y" as a genuine contrast is on-voice and must pass;
+        # only the "not X, it's Y" / "not only X but Y" pivots are banned.
+        for s in ("This is not something I planned, but I learned from it.",
+                  "That didn't work out as expected, but here's what I learned.",
+                  "The tool is not perfect, but it earned its place."):
+            items = reviewer.check_banned_patterns(s)
+            self.assertNotIn("no_not_x_but_y", _fails(items), s)
+
     def test_fragment_rhythm_caught(self):
         frag = ("AI removes bottlenecks. But not all bottlenecks. "
                 "The judgment one? Still yours. This changes everything. "

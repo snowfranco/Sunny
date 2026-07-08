@@ -352,16 +352,24 @@ async function runDraft(){
   }catch(e){ $('#draftBody').innerHTML = `<div class="card note warn">${e.message}</div>`; }
 }
 function showEscalation(res){
-  $('#draftBody').innerHTML = `<div class="card note warn"><strong>The reviewer sent this back.</strong><br>${escapeHtml(res.fail_reason||'')}<br><br>
-    It tried a couple of times and wanted your eyes rather than guessing again.</div>
-    <div class="actions"><button class="btn ghost" data-goto="angles">Try a different angle</button></div>`;
+  // The near-miss draft is real. Hand it to Snow to fix directly and export,
+  // instead of throwing it away. This is the escape hatch out of the loop.
+  state.postId = res.post_id; state.editSession = null;
+  showDraft(res.draft_text || '', null, res.fail_reason);
 }
-function showDraft(text, turns){
+function showDraft(text, turns, escalationReason){
+  const banner = escalationReason ? `
+    <div class="card note warn" style="margin-bottom:14px">
+      <strong>The model tried twice and could not clear one rule:</strong><br>
+      ${escapeHtml(escalationReason)}<br><br>
+      You can fix it right here. Edit the text below (delete or reword the flagged line) and export, or ask for a change, or start from a different angle.
+    </div>` : '';
   $('#draftBody').innerHTML = `
-    <div class="card draft" id="draftText">${escapeHtml(text)}</div>
+    ${banner}
+    <textarea class="card draft" id="draftText" style="width:100%;border:1px solid var(--border);resize:vertical">${escapeHtml(text)}</textarea>
     <div class="card convo">
       <span class="turns" id="editTurns">${turns!=null?turns+' edits left':''}</span>
-      <strong style="font-size:14px">Ask for a change</strong>
+      <strong style="font-size:14px">Ask the model for a change</strong>
       <div id="editFeedback" style="font-size:13.5px;color:var(--muted);margin-top:8px"></div>
       <div class="row">
         <input id="editMsg" placeholder="e.g. cut the second paragraph, warm up the ending…">
@@ -370,7 +378,8 @@ function showDraft(text, turns){
     </div>
     <div class="actions">
       <button class="btn" id="approveBtn">Approve &amp; export draft →</button>
-      <span style="font-size:13px;color:var(--muted)">Export writes local draft files. It never publishes.</span>
+      ${escalationReason ? '<button class="btn ghost" data-goto="angles">Different angle</button>' : ''}
+      <span style="font-size:13px;color:var(--muted)">Your edits above are what gets exported. Export writes local draft files. It never publishes.</span>
     </div>`;
   $('#editBtn').onclick = editDraft;
   $('#editMsg').addEventListener('keydown', e=>{ if(e.key==='Enter') editDraft(); });
@@ -384,7 +393,7 @@ async function editDraft(){
     const res = await api('/api/edit_refine', {post_id:state.postId, session_id:state.editSession, message:msg});
     if(res.cap_reached){ $('#editFeedback').textContent = res.prompt || 'Edit cap reached. Approve, or hand-edit the export.'; return; }
     state.editSession = res.session_id;
-    $('#draftText').textContent = res.draft_text;
+    $('#draftText').value = res.draft_text;
     $('#editFeedback').textContent = res.prompt || 'Updated.';
     $('#editMsg').value='';
     if(res.turns_remaining!=null) $('#editTurns').textContent = res.turns_remaining+' edits left';
@@ -398,7 +407,14 @@ async function approveExport(){
     return goto('done');
   }
   try{
-    await api('/api/approve_post', {post_id:state.postId});
+    // The textarea is the source of truth: Snow's manual edits are what
+    // gets exported, whether the draft passed review or was hand-fixed
+    // after an escalation.
+    const ta = $('#draftText');
+    const finalText = ta ? ta.value : null;
+    await api('/api/approve_post',
+      finalText!=null ? {post_id:state.postId, final_text:finalText}
+                      : {post_id:state.postId});
     const res = await api('/api/export', {post_id:state.postId});
     $('#donePath').textContent = res.out_dir;
     const b = res.bundle;

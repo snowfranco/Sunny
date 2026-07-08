@@ -101,8 +101,13 @@ def _reload_lexicon() -> None:
     """Drop the cache so a running server picks up brand-voice.md edits."""
     _lexicon_for.cache_clear()
 
+# The banned construction is the "not X, it's Y" / "not only X but Y"
+# rhetorical pivot (padding dressed as nuance). Plain contrastive "not X,
+# but Y" is fine and on-voice ("that didn't work out, but here's what I
+# learned"), so the "but" branch requires the "not only ... but" shape,
+# never a bare comma-but.
 NOT_X_BUT_Y = (
-    r"\bthis is not (?:just |only |merely )?(?:about )?\w[^.?!]*,\s*(?:it'?s|but)\b",
+    r"\bthis is not (?:just |only |merely )?(?:about )?\w[^.?!]*,\s*it'?s\b",
     r"\bthis isn'?t (?:just |only |merely )?(?:about )?\w[^.?!]*[;,]\s*it'?s\b",
     r"\bnot only\b[^.?!]*\bbut (?:also )?\b",
     r"\bisn'?t (?:just|only|merely)\b[^.?!]*[;,]\s*it'?s\b",

@@ -3,6 +3,22 @@
 One note per phase, newest at the top. Written during the initial build
 session; future sessions should keep appending here.
 
+## Escalation escape hatch + false-positive fix (2026-07-08)
+
+Two things behind the endless escalations. First, a real checker bug: the
+no_not_x_but_y pattern flagged plain contrastive "not X, but Y" (which is
+on-voice, mirrors "that didn't work out, but here's what I learned"); only
+the "not X, it's Y" / "not only X but Y" pivots are banned, so the bare
+comma-but branch is removed. Second, the deeper product gap: on escalation
+the UI discarded the near-miss draft and only offered "try a different
+angle", trapping the user. The brief says escalate WITH the draft and keep
+manual editing available. Now the escalation response carries the draft
+text, the draft view is a real editable textarea, and approve/export sends
+Snow's edited text verbatim, so she can delete one flagged line and ship in
+seconds instead of regenerating. Verified: forced escalation to hand-fix to
+exported draft bundle carrying her exact text. 108 tests green, goldens
+clean.
+
 ## Schema-constrained judge + self-diagnosing failure (2026-07-08)
 
 Root-cause fix for the recurring "judge returned no usable checklist": stop
