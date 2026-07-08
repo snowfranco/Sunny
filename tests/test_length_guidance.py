@@ -162,6 +162,81 @@ class TestOverWriterRecoversWithinCap(unittest.TestCase):
         self.assertEqual(verdict.revision_count, 1)
 
 
+class _NoGistWriter(llm.LLMClient):
+    """Writes a fine essay but forgets the gist line, like an 8B model
+    juggling too many instructions. The gist call itself succeeds."""
+
+    def __init__(self):
+        super().__init__("t")
+        self.gist_calls = 0
+
+    def complete_text(self, kind, system, user, max_tokens=2048):
+        if kind == "gist":
+            self.gist_calls += 1
+            return "> Covered here: the test build and its reviewer loop."
+        full = llm._mock_draft(user, "nogist")
+        return full.split("\n\n", 1)[1]  # body without the gist line
+
+    def complete_json(self, kind, system, user, max_tokens=2048):
+        return llm._mock_json(kind, user)
+
+
+class TestGistLineOwnership(unittest.TestCase):
+    def _fixture(self):
+        conn = _conn()
+        note = capture.capture_manual(conn, "gist ownership test")
+        angles = angle_engine.generate_angles(conn, note)
+        return conn, note, angles
+
+    def test_missing_gist_is_added_by_dedicated_step(self):
+        conn, note, angles = self._fixture()
+        essay = [a for a in angles if a.format == "substack_essay"][0]
+        client = _NoGistWriter()
+        draft = writer.write_draft(conn, essay, note, client)
+        self.assertTrue(draft.draft_text.startswith("> Covered here:"))
+        self.assertEqual(client.gist_calls, 1)
+        # and the whole review now passes despite the forgetful writer
+        verdict = orchestrator.run_review_loop(conn, essay, note, client, "r")
+        self.assertTrue(verdict.passed)
+
+    def test_existing_gist_is_kept_no_extra_call(self):
+        conn, note, angles = self._fixture()
+        essay = [a for a in angles if a.format == "substack_essay"][0]
+        client = _NoGistWriter()
+        text = writer._ensure_gist_line(
+            client, essay, note, "> My own gist line.\n\nBody starts here.")
+        self.assertTrue(text.startswith("> My own gist line."))
+        self.assertEqual(client.gist_calls, 0)
+
+    def test_non_substack_formats_untouched(self):
+        conn, note, angles = self._fixture()
+        social = [a for a in angles if a.format == "social_copy"][0]
+        client = llm.LLMClient("t")
+        draft = writer.write_draft(conn, social, note, client)
+        self.assertFalse(draft.draft_text.startswith(">"))
+
+    def test_gist_llm_failure_falls_back_to_title(self):
+        conn, note, angles = self._fixture()
+        essay = [a for a in angles if a.format == "substack_essay"][0]
+
+        class _Broken(llm.LLMClient):
+            def complete_text(self, kind, system, user, max_tokens=2048):
+                raise llm.LLMError("gist model down")
+
+        text = writer._ensure_gist_line(_Broken("t"), essay, note, "Body only.")
+        self.assertTrue(text.startswith(f"> Covered here: {essay.title}."))
+
+
+class TestVerbHitsNameTheWord(unittest.TestCase):
+    def test_fail_note_names_the_matched_word_not_the_regex(self):
+        from pipeline import reviewer
+        items = reviewer.check_banned_patterns("We can leverage this properly.")
+        note = [c for c in items if c.criterion == "no_performed_lingo"][0].note
+        self.assertIn("'leverage", note)
+        self.assertIn("used as a verb", note)
+        self.assertNotIn("\\b", note)
+
+
 class TestUnderWriterRecoversWithinCap(unittest.TestCase):
     def test_short_draft_passes_on_first_retry(self):
         conn = _conn()

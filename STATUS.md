@@ -3,6 +3,18 @@
 One note per phase, newest at the top. Written during the initial build
 session; future sessions should keep appending here.
 
+## Gist line as a writer-owned step; readable lingo failures (2026-07-07)
+
+The 383-word escalation showed the num_ctx fix working (up from 226) and
+the model losing a three-front battle: expand, de-lingo, and remember the
+gist line at once. Two changes. The AEO gist line is paratext, so the
+writer now produces it as its own focused step after the body (skipped when
+the draft already opens with one; deterministic title fallback if the call
+fails), which removes one front entirely. And verb-lingo failures now name
+the matched word ("'leverage' used as a verb") instead of leaking the raw
+regex into the feedback and the UI. Retry cap unchanged. 90 tests green,
+goldens clean.
+
 ## Ollama context window + retries that edit (2026-07-07)
 
 Root cause of the persistent short essays found by arithmetic, not

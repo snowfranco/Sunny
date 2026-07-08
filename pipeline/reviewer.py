@@ -150,7 +150,13 @@ def check_banned_patterns(text: str, fmt: str = "") -> list[S.ChecklistItem]:
 
     banned_lingo, signpost_sentences = _lexicon()
     hits = [w for w in banned_lingo if w in lower]
-    hits += [p for p in BANNED_VERB_PATTERNS if re.search(p, lower)]
+    # Report the matched word, not the regex: the fail reason goes back to
+    # the writer model (and to Snow), and '\\bleverag(?:es|ed|ing)\\b' tells
+    # neither of them what to remove.
+    for p in BANNED_VERB_PATTERNS:
+        m = re.search(p, lower)
+        if m:
+            hits.append(f"'{m.group(0).strip()}' used as a verb")
     items.append(S.ChecklistItem(
         "no_performed_lingo", not hits,
         f"banned lingo: {hits}" if hits else "clean"))

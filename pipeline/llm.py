@@ -31,6 +31,7 @@ KINDS = (
     "landscape",       # context -> suggestion dicts with source URLs
     "draft",           # angle + context -> draft text
     "revise_draft",    # draft + instruction -> revised draft text
+    "gist",            # essay draft -> one AEO gist line (paratext)
     "review",          # draft -> subjective checklist verdicts
     "caption",         # post -> image caption
     "repurpose",       # post -> linkedin extract + notes hook
@@ -324,6 +325,9 @@ def _mock_text(kind: str, user: str) -> str:
         return _mock_draft(user, s, revised=True)
     if kind == "caption":
         return f"Working notes from the build, {s} edition. The diagram is the tidy version; the week was not."
+    if kind == "gist":
+        return (f"> Covered here: the {s} build, the reviewer loop, and what "
+                "the retry cap caught.")
     raise LLMError(f"no mock text for kind {kind!r}")
 
 

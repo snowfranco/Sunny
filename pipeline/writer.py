@@ -128,6 +128,34 @@ def _feedback_addendum(feedback: str, fmt: str) -> str:
     return text
 
 
+def _ensure_gist_line(client: llm.LLMClient, angle: S.AngleOption,
+                      note: S.CaptureNote, text: str) -> str:
+    """Substack essays open with an AEO gist line. It is paratext (a subject
+    line, not the piece), so the writer owns producing it as a separate
+    focused step instead of hoping the model remembers it while also fixing
+    length and lingo. If the draft already opens with one, keep it."""
+    stripped = text.strip()
+    first = stripped.splitlines()[0].strip() if stripped else ""
+    if first.startswith("> "):
+        return stripped
+    try:
+        line = client.complete_text(
+            "gist",
+            "Write exactly one line for the top of a Substack essay: a "
+            "blockquote starting '> Covered here:' that names the actual "
+            "tools, projects and concepts the essay discusses. Direct, not "
+            "teasing, under 35 words, no em dashes. Reply with that one "
+            "line only.",
+            f"ESSAY:\n{stripped[:1500]}\n\nSOURCE NOTE:\n{note.raw_text[:500]}",
+            max_tokens=80).strip().splitlines()[0].strip()
+        if not line.startswith(">"):
+            line = "> " + line.lstrip("> ").strip()
+        line = line.replace("—", ",")  # paratext obeys the em dash ban too
+    except llm.LLMError:
+        line = f"> Covered here: {angle.title}."
+    return line + "\n\n" + stripped
+
+
 def _writing_context(context_dir: Path | None = None) -> str:
     d = context_dir or REPO_ROOT / "context"
     parts = []
@@ -169,6 +197,9 @@ def write_draft(conn, angle: S.AngleOption, note: S.CaptureNote,
                                     max_tokens=3000)
     else:
         text = client.complete_text("draft", WRITER_SYSTEM, user, max_tokens=3000)
+
+    if angle.format == "substack_essay":
+        text = _ensure_gist_line(client, angle, note, text)
 
     out = S.WriterOutput(
         post_id=post_id or S.new_id(),
