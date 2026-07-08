@@ -283,19 +283,71 @@ covering exactly these criteria:
 Scale the structural criteria to the format. For social_copy (1-3
 sentences) and other very short formats, a single wry, specific observation
 satisfies insight/throwaway/unresolved/door at once; do not fail a short
-piece for lacking essay furniture the format has no room for."""
+piece for lacking essay furniture the format has no room for.
+Your reply MUST be a JSON array at the top level, not an object. Shape
+example (values illustrative):
+[{"criterion": "voice_match", "passed": true, "note": "direct, in voice"},
+ {"criterion": "claim_traceability", "passed": false, "note": "invented a number"}]"""
+
+
+# Small local models in JSON mode rarely emit the exact requested shape (a
+# top-level array of {criterion, passed, note}). They produce objects keyed
+# by criterion, single flat items, boolean maps, and alias keys. All of
+# those carry the same information; parse them instead of failing them.
+_CRIT_KEYS = ("criterion", "criteria", "name", "check", "rule")
+_PASS_KEYS = ("passed", "pass", "ok", "result", "verdict", "value")
+_NOTE_KEYS = ("note", "notes", "reason", "comment", "explanation")
+
+
+def _coerce_item(crit_hint, obj) -> S.ChecklistItem | None:
+    if isinstance(obj, bool):
+        return S.ChecklistItem(str(crit_hint or "unknown"), obj, "")
+    if not isinstance(obj, dict):
+        return None
+    crit = crit_hint
+    for k in _CRIT_KEYS:
+        if isinstance(obj.get(k), str):
+            crit = obj[k]
+            break
+    passed = None
+    for k in _PASS_KEYS:
+        v = obj.get(k)
+        if isinstance(v, bool):
+            passed = v
+            break
+        if isinstance(v, str) and v.strip().lower() in ("true", "false",
+                                                        "pass", "fail",
+                                                        "yes", "no"):
+            passed = v.strip().lower() in ("true", "pass", "yes")
+            break
+    if crit is None or passed is None:
+        return None
+    note = ""
+    for k in _NOTE_KEYS:
+        if isinstance(obj.get(k), str):
+            note = obj[k]
+            break
+    return S.ChecklistItem(str(crit), passed, note)
 
 
 def _judge_items(raw) -> list[S.ChecklistItem]:
-    items = []
+    items: list[S.ChecklistItem] = []
+    if isinstance(raw, dict):
+        single = _coerce_item(None, raw)
+        if single:
+            return [single]
+        for k, v in raw.items():
+            if isinstance(v, list):
+                continue  # {"checklist": [...]} handled by unwrap below
+            it = _coerce_item(k, v)
+            if it:
+                items.append(it)
+        if items:
+            return items
     for it in llm.unwrap_list(raw):
-        if not isinstance(it, dict):
-            continue
-        items.append(S.ChecklistItem(
-            criterion=str(it.get("criterion", "unknown")),
-            passed=bool(it.get("passed", False)),
-            note=str(it.get("note", "")),
-        ))
+        coerced = _coerce_item(None, it)
+        if coerced:
+            items.append(coerced)
     return items
 
 

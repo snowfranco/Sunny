@@ -3,6 +3,16 @@
 One note per phase, newest at the top. Written during the initial build
 session; future sessions should keep appending here.
 
+## Judge shape tolerance (2026-07-08)
+
+"Judge returned no usable checklist twice" turned out to be parser
+strictness, not model failure: llama3.1:8b in JSON mode reliably emits an
+object keyed by criterion (or a single flat item, boolean maps, alias keys
+like pass/name/reason) rather than the requested top-level array. The
+parser now coerces every shape that carries the verdict information, and
+the judge prompt shows an explicit array example. True garbage still fails
+with the doctor hint after one re-ask. 104 tests green, goldens clean.
+
 ## Direction-aware length retries + lingo removal orders (2026-07-08)
 
 Snow's stack is confirmed current (fail reasons name real words now), and
