@@ -8,6 +8,7 @@ guardrail leans on this when the guide changes).
 from __future__ import annotations
 
 import hashlib
+import re
 from pathlib import Path
 
 from . import db, llm
@@ -101,21 +102,35 @@ def _length_guidance(fmt: str) -> str:
 
 def _feedback_addendum(feedback: str, fmt: str) -> str:
     """Turn reviewer fail reasons into direct instructions. Length failures
-    get an explicit expand/trim order; small models don't infer it from the
-    raw bound."""
+    get an explicit, DIRECTION-AWARE expand/trim order; small models don't
+    infer it from the raw bound, and telling an over-long draft to 'write
+    the full length' makes it longer."""
     text = ("\n\nA reviewer failed the previous draft for these specific "
             f"reasons; fix them without losing the voice:\n{feedback}")
+    if "no_performed_lingo" in feedback:
+        text += ("\n\nThe banned words named above must go: delete each one "
+                 "or rewrite its sentence in plain language. Do not swap in "
+                 "different buzzwords.")
     if "length_bounds" in feedback:
         bounds = S.LENGTH_BOUNDS.get(fmt)
+        measured = re.search(r"(\d+)\s+(?:words|sentences)", feedback)
+        n = int(measured.group(1)) if measured else None
         if bounds and bounds[0] == "words":
             _, lo, hi = bounds
             target = lo + (hi - lo) // 3
-            text += (f"\n\nThe previous draft failed on LENGTH. This time "
-                     f"write the full length: at least {lo} words, aiming "
-                     f"for about {target}. Expand every section with "
-                     "concrete detail from the source note (what happened, "
-                     "what it cost, what changed). Do not pad with filler; "
-                     "add substance.")
+            if n is not None and n > hi:
+                text += (f"\n\nThe previous draft failed on LENGTH: it is "
+                         f"{n} words and the maximum is {hi}. CUT it to "
+                         f"about {target} words. Remove the weakest "
+                         "paragraph and tighten every sentence; do not add "
+                         "anything new.")
+            else:
+                text += (f"\n\nThe previous draft failed on LENGTH. This "
+                         f"time write the full length: at least {lo} words, "
+                         f"aiming for about {target}. Expand every section "
+                         "with concrete detail from the source note (what "
+                         "happened, what it cost, what changed). Do not pad "
+                         "with filler; add substance.")
         elif bounds:
             _, lo, hi = bounds
             text += (f"\n\nThe previous draft failed on LENGTH: this format "

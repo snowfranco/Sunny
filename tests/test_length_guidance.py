@@ -82,6 +82,36 @@ class TestLengthGuidanceInPrompts(unittest.TestCase):
         self.assertIn("failed on LENGTH", client.prompts[0])
         self.assertIn("at least 400 words", client.prompts[0])
 
+    def test_word_overshoot_orders_a_cut_not_an_expand(self):
+        conn, note, essay = self._fixture()
+        angles = angle_engine.generate_angles(conn, note)
+        linkedin = [a for a in angles if a.format == "linkedin_post"][0]
+        client = _CapturingClient()
+        writer.write_draft(conn, linkedin, note, client, post_id="p",
+                           revision=1,
+                           feedback="length_bounds: 256 words (bound 100-200 "
+                                    "for linkedin_post)")
+        self.assertIn("CUT it to about 133 words", client.prompts[0])
+        self.assertNotIn("Expand every section", client.prompts[0])
+
+    def test_word_undershoot_still_orders_expansion(self):
+        conn, note, essay = self._fixture()
+        client = _CapturingClient()
+        writer.write_draft(conn, essay, note, client, post_id="p", revision=1,
+                           feedback="length_bounds: 256 words (bound 400-900 "
+                                    "for substack_essay)")
+        self.assertIn("Expand every section", client.prompts[0])
+        self.assertNotIn("CUT it", client.prompts[0])
+
+    def test_lingo_failure_orders_plain_language_rewrite(self):
+        conn, note, essay = self._fixture()
+        client = _CapturingClient()
+        writer.write_draft(conn, essay, note, client, post_id="p", revision=1,
+                           feedback="no_performed_lingo: banned lingo: "
+                                    "['the future of', \"'leverages' used as a verb\"]")
+        self.assertIn("banned words named above must go", client.prompts[0])
+        self.assertIn("Do not swap in different buzzwords", client.prompts[0])
+
     def test_non_length_feedback_gets_no_length_order(self):
         conn, note, essay = self._fixture()
         client = _CapturingClient()
@@ -235,6 +265,37 @@ class TestVerbHitsNameTheWord(unittest.TestCase):
         self.assertIn("'leverage", note)
         self.assertIn("used as a verb", note)
         self.assertNotIn("\\b", note)
+
+
+class _VerboseLinkedInWriter(llm.LLMClient):
+    """Writes a 256-word LinkedIn post until told to CUT, then complies.
+    The overshoot mode from Snow's live run."""
+
+    LONG = ("I have been sitting with something after this build. " * 2
+            + ("The part I expected to be hard was done in an afternoon and "
+               "the part I expected to be free took the rest of the week, "
+               "which keeps happening in the same direction every time. " * 8)
+            + "What does your error keep telling you?")
+
+    def complete_text(self, kind, system, user, max_tokens=2048):
+        if "CUT it to about" in user:
+            return llm._mock_draft(user, "trimmed")  # in-bounds linkedin mock
+        return self.LONG
+
+    def complete_json(self, kind, system, user, max_tokens=2048):
+        return llm._mock_json(kind, user)
+
+
+class TestOverWriterLinkedInRecovers(unittest.TestCase):
+    def test_overlong_post_passes_after_cut_order(self):
+        conn = _conn()
+        note = capture.capture_manual(conn, "linkedin overshoot recovery")
+        angles = angle_engine.generate_angles(conn, note)
+        linkedin = [a for a in angles if a.format == "linkedin_post"][0]
+        client = _VerboseLinkedInWriter("t")
+        verdict = orchestrator.run_review_loop(conn, linkedin, note, client, "r")
+        self.assertTrue(verdict.passed)
+        self.assertEqual(verdict.revision_count, 1)
 
 
 class TestUnderWriterRecoversWithinCap(unittest.TestCase):

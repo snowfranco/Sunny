@@ -3,6 +3,19 @@
 One note per phase, newest at the top. Written during the initial build
 session; future sessions should keep appending here.
 
+## Direction-aware length retries + lingo removal orders (2026-07-08)
+
+Snow's stack is confirmed current (fail reasons name real words now), and
+the live escalation exposed a genuine retry bug: a 256-word LinkedIn post
+(cap 200) got told to "write the full length... expand every section",
+because the length addendum only knew the expand direction. The retry now
+parses the measured count from the fail reason and orders a CUT (with
+target and "remove the weakest paragraph") when over the cap, expansion
+only when under the floor. Lingo failures additionally get an explicit
+"delete or rewrite these exact words, no substitute buzzwords" order.
+Simulated 256-word over-writer passes on revision 1. 98 tests green,
+goldens clean.
+
 ## pipeline doctor, boot banner, judge re-ask (2026-07-07)
 
 Snow's Ollama log showed requests hitting /v1/chat/completions with
