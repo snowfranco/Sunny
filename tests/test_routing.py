@@ -25,11 +25,13 @@ class _StubOllama(BaseHTTPRequestHandler):
     def do_POST(self):
         body = json.loads(self.rfile.read(
             int(self.headers.get("Content-Length") or 0)))
+        fmt = body.get("format")
         reply = {
             "message": {"content": json.dumps({
                 "reached": "ollama-stub",
                 "model": body.get("model"),
-                "json_mode": body.get("format") == "json",
+                "json_mode": fmt == "json",
+                "schema_type": fmt.get("type") if isinstance(fmt, dict) else None,
                 "num_ctx": body.get("options", {}).get("num_ctx"),
             })},
             "prompt_eval_count": 10,
@@ -131,6 +133,22 @@ class TestOllamaRouting(unittest.TestCase):
             client = llm.LLMClient("t")
             data = client.complete_json("growth", "sys", "user prompt")
             self.assertTrue(data["json_mode"])
+
+    def test_schema_is_sent_as_format_when_provided(self):
+        with self._env():
+            client = llm.LLMClient("t")
+            data = client.complete_json(
+                "review", "sys", "user prompt",
+                schema={"type": "array", "items": {"type": "object"}})
+            # schema overrides the plain "json" format
+            self.assertFalse(data["json_mode"])
+            self.assertEqual(data["schema_type"], "array")
+
+    def test_last_raw_reply_is_captured(self):
+        with self._env():
+            client = llm.LLMClient("t")
+            client.complete_text("draft", "sys", "user prompt")
+            self.assertIn("ollama-stub", client.last_raw_reply)
 
     def test_list_models_reads_tags(self):
         with self._env():

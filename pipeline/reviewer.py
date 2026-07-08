@@ -299,9 +299,29 @@ _PASS_KEYS = ("passed", "pass", "ok", "result", "verdict", "value")
 _NOTE_KEYS = ("note", "notes", "reason", "comment", "explanation")
 
 
+# "voice_match: pass, reads well" / "claim_traceability - fail" etc.
+_STRING_ITEM_RE = re.compile(
+    r"^\s*(?P<crit>[\w][\w /_-]*?)\s*[:\-]\s*"
+    r"(?P<verdict>pass(?:ed)?|fail(?:ed)?|true|false|yes|no)\b[\s.:,-]*(?P<note>.*)$",
+    re.IGNORECASE)
+_VERDICT_WORDS = ("pass", "passed", "true", "yes", "fail", "failed", "false", "no")
+_PASS_WORDS = ("pass", "passed", "true", "yes")
+
+
 def _coerce_item(crit_hint, obj) -> S.ChecklistItem | None:
     if isinstance(obj, bool):
         return S.ChecklistItem(str(crit_hint or "unknown"), obj, "")
+    if isinstance(obj, str):
+        m = _STRING_ITEM_RE.match(obj)
+        if m:
+            return S.ChecklistItem(
+                m.group("crit").strip(),
+                m.group("verdict").lower() in _PASS_WORDS,
+                m.group("note").strip())
+        if crit_hint and obj.strip().lower() in _VERDICT_WORDS:
+            return S.ChecklistItem(str(crit_hint),
+                                   obj.strip().lower() in _PASS_WORDS, "")
+        return None
     if not isinstance(obj, dict):
         return None
     crit = crit_hint
@@ -351,6 +371,24 @@ def _judge_items(raw) -> list[S.ChecklistItem]:
     return items
 
 
+# Hard grammar constraint for backends that support structured outputs
+# (Ollama, Gemini). This is the real fix for small models emitting the wrong
+# JSON shape: the model is constrained to this array-of-objects at decode
+# time, not asked nicely for it.
+JUDGE_SCHEMA = {
+    "type": "array",
+    "items": {
+        "type": "object",
+        "properties": {
+            "criterion": {"type": "string"},
+            "passed": {"type": "boolean"},
+            "note": {"type": "string"},
+        },
+        "required": ["criterion", "passed", "note"],
+    },
+}
+
+
 def judge_subjective(draft_text: str, pillar: str, fmt: str,
                      source_note: str, client: llm.LLMClient,
                      context_dir: Path | None = None) -> list[S.ChecklistItem]:
@@ -358,7 +396,7 @@ def judge_subjective(draft_text: str, pillar: str, fmt: str,
     user = (f"PILLAR: {pillar}\nFORMAT: {fmt}\n\n"
             f"SOURCE NOTE (ground truth for claims):\n{source_note}\n\n"
             f"BRAND VOICE GUIDE:\n{voice}\n\nDRAFT:\n{draft_text}")
-    raw = client.complete_json("review", JUDGE_SYSTEM, user)
+    raw = client.complete_json("review", JUDGE_SYSTEM, user, schema=JUDGE_SCHEMA)
     items = _judge_items(raw)
     if not items:
         # One re-ask: a malformed judge reply is a transport problem, not an
@@ -368,13 +406,18 @@ def judge_subjective(draft_text: str, pillar: str, fmt: str,
             "review", JUDGE_SYSTEM,
             user + "\n\nYour previous reply was not a usable JSON array of "
                    "checklist objects. Reply with ONLY the JSON array, no "
-                   "prose.")
+                   "prose.",
+            schema=JUDGE_SCHEMA)
         items = _judge_items(raw)
     if not items:
+        # Surface what the model actually said, truncated. Discarding it is
+        # what kept this undiagnosable; now the failure carries its evidence.
+        snippet = " ".join(str(getattr(client, "last_raw_reply", "")).split())[:220]
         items.append(S.ChecklistItem(
             "voice_match", False,
-            "judge returned no usable checklist twice; check the model with "
-            "`python3 -m pipeline doctor`"))
+            "judge returned no usable checklist twice. Model reply was: "
+            f"{snippet!r}. Run `python3 -m pipeline doctor --judge` to probe "
+            "the judge directly."))
     return items
 
 

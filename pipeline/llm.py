@@ -69,6 +69,10 @@ class LLMClient:
         self.budget = _RunBudget(config.max_tokens_per_run())
         self.mock = config.mock_mode()
         self._client = None
+        # The most recent raw model reply, verbatim. Kept so a caller whose
+        # parse failed can report what the model actually said instead of
+        # discarding the one piece of evidence that ends the guessing.
+        self.last_raw_reply = ""
 
     # -- public -------------------------------------------------------------
 
@@ -77,18 +81,26 @@ class LLMClient:
         assert kind in KINDS, f"unknown call kind {kind!r}"
         if self.mock:
             self.budget.charge(_approx_tokens(system + user))
-            return _mock_text(kind, user)
+            out = _mock_text(kind, user)
+            self.last_raw_reply = out
+            return out
         return self._real_call(system, user, max_tokens)
 
     def complete_json(self, kind: str, system: str, user: str,
-                      max_tokens: int = 2048):
+                      max_tokens: int = 2048, schema: dict | None = None):
+        """Parsed JSON from the model. `schema` (a JSON Schema dict) is used
+        as a hard grammar constraint where the backend supports it (Ollama
+        structured outputs, Gemini), which is the real fix for small models
+        emitting the wrong JSON shape; elsewhere it is advisory via prompt."""
         assert kind in KINDS, f"unknown call kind {kind!r}"
         if self.mock:
             self.budget.charge(_approx_tokens(system + user))
-            return _mock_json(kind, user)
+            out = _mock_json(kind, user)
+            self.last_raw_reply = json.dumps(out)
+            return out
         raw = self._real_call(
             system + "\n\nRespond with valid JSON only. No prose, no fences.",
-            user, max_tokens, json_mode=True)
+            user, max_tokens, json_mode=True, schema=schema)
         return _parse_json_reply(raw)
 
     # -- real APIs ------------------------------------------------------------
@@ -96,14 +108,18 @@ class LLMClient:
     # PIPELINE_MODEL means mock mode, and that stays deliberate.
 
     def _real_call(self, system: str, user: str, max_tokens: int,
-                   json_mode: bool = False) -> str:
+                   json_mode: bool = False, schema: dict | None = None) -> str:
         model = config.pipeline_model()
         if model.startswith("ollama/"):
-            return self._ollama_call(model.removeprefix("ollama/"),
-                                     system, user, max_tokens, json_mode)
-        if model.startswith("gemini"):
-            return self._gemini_call(model, system, user, max_tokens, json_mode)
-        return self._anthropic_call(model, system, user, max_tokens)
+            out = self._ollama_call(model.removeprefix("ollama/"),
+                                    system, user, max_tokens, json_mode, schema)
+        elif model.startswith("gemini"):
+            out = self._gemini_call(model, system, user, max_tokens,
+                                    json_mode, schema)
+        else:
+            out = self._anthropic_call(model, system, user, max_tokens)
+        self.last_raw_reply = out
+        return out
 
     def _anthropic_call(self, model: str, system: str, user: str,
                         max_tokens: int) -> str:
@@ -129,7 +145,8 @@ class LLMClient:
         return "".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
 
     def _ollama_call(self, model: str, system: str, user: str,
-                     max_tokens: int, json_mode: bool) -> str:
+                     max_tokens: int, json_mode: bool,
+                     schema: dict | None = None) -> str:
         import urllib.error
         import urllib.request
         payload = {
@@ -143,7 +160,12 @@ class LLMClient:
             "options": {"num_predict": max_tokens,
                         "num_ctx": config.ollama_num_ctx()},
         }
-        if json_mode:
+        # A schema constrains generation to the exact shape (Ollama
+        # structured outputs); plain "json" only guarantees valid JSON of
+        # any shape, which small models get wrong. Prefer the schema.
+        if schema is not None:
+            payload["format"] = schema
+        elif json_mode:
             payload["format"] = "json"
         req = urllib.request.Request(
             config.ollama_host() + "/api/chat",
@@ -164,7 +186,8 @@ class LLMClient:
         return str(data.get("message", {}).get("content", ""))
 
     def _gemini_call(self, model: str, system: str, user: str,
-                     max_tokens: int, json_mode: bool) -> str:
+                     max_tokens: int, json_mode: bool,
+                     schema: dict | None = None) -> str:
         try:
             import google.generativeai as genai  # lazy, like anthropic
         except ImportError as e:
@@ -177,8 +200,10 @@ class LLMClient:
                            "a gemini model")
         genai.configure(api_key=api_key)
         gen_config: dict = {"max_output_tokens": max_tokens}
-        if json_mode:
+        if json_mode or schema is not None:
             gen_config["response_mime_type"] = "application/json"
+        if schema is not None:
+            gen_config["response_schema"] = schema
         gmodel = genai.GenerativeModel(model, system_instruction=system)
         resp = gmodel.generate_content(user, generation_config=gen_config)
         usage = getattr(resp, "usage_metadata", None)

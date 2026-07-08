@@ -359,6 +359,32 @@ def cmd_doctor(args) -> int:
         except Exception as e:
             bad(f"live model call failed: {e}")
 
+    # 5. The judge specifically (the step that keeps escalating). Exercises
+    #    the real schema-constrained review call on a canned draft and shows
+    #    the raw reply plus how many checklist items parsed out of it.
+    if args.judge and not config_mod.mock_mode():
+        from . import reviewer
+        sample = ("I shipped the reviewer loop today and the judge caught my "
+                  "own em dash before it caught the model's. I am not sure if "
+                  "you would agree, but that felt backwards in a useful way.")
+        try:
+            client = llm.LLMClient(run_id="doctor-judge")
+            items = reviewer.judge_subjective(
+                sample, "build_in_public", "social_copy", sample, client)
+            raw = str(getattr(client, "last_raw_reply", ""))[:600]
+            print(f"  [--] judge raw reply: {raw!r}")
+            parsed = [c for c in items
+                      if "no usable checklist" not in c.note]
+            if parsed:
+                ok(f"judge parsed {len(parsed)} checklist item(s)")
+            else:
+                bad("judge produced no parseable checklist; the raw reply "
+                    "above is what your model emits. If it is prose or an "
+                    "unexpected shape, the model is the bottleneck; try a "
+                    "larger local model in PIPELINE_MODEL.")
+        except Exception as e:
+            bad(f"judge probe failed: {e}")
+
     print("all good" if not problems
           else f"{problems} problem(s); fix the [!!] lines top to bottom")
     return 0 if not problems else 1
@@ -456,6 +482,8 @@ def build_parser() -> argparse.ArgumentParser:
                                        "reachability")
     dr.add_argument("--no-call", action="store_true",
                     help="skip the live model round trip")
+    dr.add_argument("--judge", action="store_true",
+                    help="also probe the LLM judge and print its raw reply")
     dr.set_defaults(fn=cmd_doctor)
 
     return p

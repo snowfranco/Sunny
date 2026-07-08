@@ -19,7 +19,7 @@ class _FlakyJudge(llm.LLMClient):
         self.garbage_left = garbage_replies
         self.calls = 0
 
-    def complete_json(self, kind, system, user, max_tokens=2048):
+    def complete_json(self, kind, system, user, max_tokens=2048, schema=None):
         self.calls += 1
         if self.garbage_left > 0:
             self.garbage_left -= 1
@@ -42,6 +42,19 @@ class TestJudgeReask(unittest.TestCase):
         self.assertEqual(client.calls, 2)  # exactly one re-ask, bounded
         self.assertFalse(items[0].passed)
         self.assertIn("doctor", items[0].note)
+
+    def test_fail_note_carries_the_raw_model_reply(self):
+        class _ProseJudge(llm.LLMClient):
+            def complete_json(self, kind, system, user, max_tokens=2048,
+                              schema=None):
+                self.last_raw_reply = "Sure! The draft looks great overall."
+                return {"summary": "looks great"}  # no verdicts
+
+        items = reviewer.judge_subjective("draft", "build_in_public",
+                                          "linkedin_post", "note", _ProseJudge("t"))
+        self.assertFalse(items[0].passed)
+        self.assertIn("looks great", items[0].note)
+        self.assertIn("--judge", items[0].note)
 
     def test_non_dict_entries_skipped(self):
         self.assertEqual(reviewer._judge_items(["a string", 42]), [])

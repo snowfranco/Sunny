@@ -54,7 +54,7 @@ class _UnderWriter(llm.LLMClient):
             return llm._mock_draft(user, "expanded")  # full-length mock essay
         return self.SHORT
 
-    def complete_json(self, kind, system, user, max_tokens=2048):
+    def complete_json(self, kind, system, user, max_tokens=2048, schema=None):
         return llm._mock_json(kind, user)
 
 
@@ -176,7 +176,7 @@ class _OverWriter(llm.LLMClient):
                     "Not sure yet which estimate to stop trusting.")
         return self.LONG
 
-    def complete_json(self, kind, system, user, max_tokens=2048):
+    def complete_json(self, kind, system, user, max_tokens=2048, schema=None):
         return llm._mock_json(kind, user)
 
 
@@ -207,7 +207,7 @@ class _NoGistWriter(llm.LLMClient):
         full = llm._mock_draft(user, "nogist")
         return full.split("\n\n", 1)[1]  # body without the gist line
 
-    def complete_json(self, kind, system, user, max_tokens=2048):
+    def complete_json(self, kind, system, user, max_tokens=2048, schema=None):
         return llm._mock_json(kind, user)
 
 
@@ -282,7 +282,7 @@ class _VerboseLinkedInWriter(llm.LLMClient):
             return llm._mock_draft(user, "trimmed")  # in-bounds linkedin mock
         return self.LONG
 
-    def complete_json(self, kind, system, user, max_tokens=2048):
+    def complete_json(self, kind, system, user, max_tokens=2048, schema=None):
         return llm._mock_json(kind, user)
 
 

@@ -3,6 +3,19 @@
 One note per phase, newest at the top. Written during the initial build
 session; future sessions should keep appending here.
 
+## Schema-constrained judge + self-diagnosing failure (2026-07-08)
+
+Root-cause fix for the recurring "judge returned no usable checklist": stop
+parsing around the model and constrain it at decode time. The judge call
+now passes a JSON Schema as Ollama's `format` (structured outputs; Gemini
+gets response_schema too), so the model is grammar-forced to emit the exact
+array-of-{criterion,passed,note}. The tolerant parser and one re-ask stay
+as backstops. Two diagnostics so this can never again be undiagnosable from
+a distance: the fallback fail note now embeds the raw model reply
+(truncated), and `pipeline doctor --judge` runs a real judge call and
+prints exactly what the model emitted plus how many items parsed. LLMClient
+records last_raw_reply on every call. 107 tests green, goldens clean.
+
 ## Judge shape tolerance (2026-07-08)
 
 "Judge returned no usable checklist twice" turned out to be parser

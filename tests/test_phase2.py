@@ -112,7 +112,7 @@ class _BadDraftClient(llm.LLMClient):
                 "A draft — with a stubborn em dash that survives feedback. "
                 + "It keeps a reasonable sentence length going so only the dash fails. " * 30)
 
-    def complete_json(self, kind, system, user, max_tokens=2048):
+    def complete_json(self, kind, system, user, max_tokens=2048, schema=None):
         return llm._mock_json(kind, user)
 
 
