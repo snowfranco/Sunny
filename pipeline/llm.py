@@ -190,6 +190,22 @@ class LLMClient:
         return resp.text
 
 
+def ollama_list_models() -> list[str]:
+    """Model names the local Ollama server has pulled. Raises LLMError when
+    unreachable. Used by `pipeline doctor` (HTTP stays in this module; the
+    no-publish tripwire test allows it only here and in serve.py)."""
+    import urllib.error
+    import urllib.request
+    try:
+        with urllib.request.urlopen(config.ollama_host() + "/api/tags",
+                                    timeout=5) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.URLError as e:
+        raise LLMError(
+            f"cannot reach Ollama at {config.ollama_host()}: {e}") from e
+    return [str(m.get("name", "")) for m in data.get("models", [])]
+
+
 def unwrap_list(obj) -> list:
     """Tolerate the common local-model habit of wrapping a JSON array in a
     single-key object ({"angles": [...]}, {"items": [...]}). Returns the

@@ -286,6 +286,19 @@ satisfies insight/throwaway/unresolved/door at once; do not fail a short
 piece for lacking essay furniture the format has no room for."""
 
 
+def _judge_items(raw) -> list[S.ChecklistItem]:
+    items = []
+    for it in llm.unwrap_list(raw):
+        if not isinstance(it, dict):
+            continue
+        items.append(S.ChecklistItem(
+            criterion=str(it.get("criterion", "unknown")),
+            passed=bool(it.get("passed", False)),
+            note=str(it.get("note", "")),
+        ))
+    return items
+
+
 def judge_subjective(draft_text: str, pillar: str, fmt: str,
                      source_note: str, client: llm.LLMClient,
                      context_dir: Path | None = None) -> list[S.ChecklistItem]:
@@ -294,16 +307,22 @@ def judge_subjective(draft_text: str, pillar: str, fmt: str,
             f"SOURCE NOTE (ground truth for claims):\n{source_note}\n\n"
             f"BRAND VOICE GUIDE:\n{voice}\n\nDRAFT:\n{draft_text}")
     raw = client.complete_json("review", JUDGE_SYSTEM, user)
-    items = []
-    for it in llm.unwrap_list(raw):
-        items.append(S.ChecklistItem(
-            criterion=str(it.get("criterion", "unknown")),
-            passed=bool(it.get("passed", False)),
-            note=str(it.get("note", "")),
-        ))
+    items = _judge_items(raw)
     if not items:
-        items.append(S.ChecklistItem("voice_match", False,
-                                     "judge returned no usable checklist"))
+        # One re-ask: a malformed judge reply is a transport problem, not an
+        # editorial verdict, and shouldn't burn a writer retry. This does
+        # not touch the reviewer retry cap.
+        raw = client.complete_json(
+            "review", JUDGE_SYSTEM,
+            user + "\n\nYour previous reply was not a usable JSON array of "
+                   "checklist objects. Reply with ONLY the JSON array, no "
+                   "prose.")
+        items = _judge_items(raw)
+    if not items:
+        items.append(S.ChecklistItem(
+            "voice_match", False,
+            "judge returned no usable checklist twice; check the model with "
+            "`python3 -m pipeline doctor`"))
     return items
 
 

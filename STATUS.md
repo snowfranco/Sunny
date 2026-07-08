@@ -3,6 +3,21 @@
 One note per phase, newest at the top. Written during the initial build
 session; future sessions should keep appending here.
 
+## pipeline doctor, boot banner, judge re-ask (2026-07-07)
+
+Snow's Ollama log showed requests hitting /v1/chat/completions with
+n_ctx_slot 4096 and a 13k-token judge prompt truncated to 2050: the
+hand-copied llm.py from before the pulls was back in her working tree
+(stash pop over the pulled version), shadowing every fix. The code was
+fine; the tree was lying. Three additions so this diagnoses itself:
+`pipeline doctor` checks git drift in pipeline/ and web/, whether THIS
+process sees PIPELINE_MODEL, whether Ollama is reachable and has the model
+pulled, and does one live round trip; `pipeline serve` now prints a boot
+banner naming the model, endpoint and num_ctx it will actually use; and a
+malformed judge reply gets one bounded re-ask before failing (transport
+problems shouldn't burn writer retries; the fallback note points at
+doctor). 94 tests green.
+
 ## Gist line as a writer-owned step; readable lingo failures (2026-07-07)
 
 The 383-word escalation showed the num_ctx fix working (up from 226) and

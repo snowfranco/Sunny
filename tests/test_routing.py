@@ -11,7 +11,16 @@ from pipeline import config, llm
 
 
 class _StubOllama(BaseHTTPRequestHandler):
-    """Minimal /api/chat that echoes proof it was reached."""
+    """Minimal /api/chat + /api/tags that echoes proof it was reached."""
+
+    def do_GET(self):
+        if self.path == "/api/tags":
+            out = json.dumps({"models": [{"name": "test-model:latest"},
+                                         {"name": "other:8b"}]}).encode()
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(out)))
+            self.end_headers()
+            self.wfile.write(out)
 
     def do_POST(self):
         body = json.loads(self.rfile.read(
@@ -122,6 +131,11 @@ class TestOllamaRouting(unittest.TestCase):
             client = llm.LLMClient("t")
             data = client.complete_json("growth", "sys", "user prompt")
             self.assertTrue(data["json_mode"])
+
+    def test_list_models_reads_tags(self):
+        with self._env():
+            names = llm.ollama_list_models()
+            self.assertIn("test-model:latest", names)
 
     def test_unreachable_ollama_raises_actionable_error(self):
         with _EnvPatch(PIPELINE_MODEL="ollama/x", PIPELINE_MOCK=None,

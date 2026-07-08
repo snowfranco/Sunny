@@ -278,6 +278,92 @@ def cmd_context_update(args) -> int:
     return 0
 
 
+def cmd_doctor(args) -> int:
+    """Self-check for the layers that keep going wrong: local edits
+    shadowing pulled code, env not reaching the process, Ollama not
+    reachable or missing the model. Run this first when generations
+    misbehave; it says which layer is lying."""
+    import os
+    import subprocess
+    from . import config as config_mod
+    from . import llm
+    from .config import REPO_ROOT
+    problems = 0
+
+    def ok(msg):
+        print(f"  [ok] {msg}")
+
+    def bad(msg):
+        nonlocal problems
+        problems += 1
+        print(f"  [!!] {msg}")
+
+    print("sunny doctor")
+
+    # 1. Is the code on disk the code you think you pulled?
+    try:
+        head = subprocess.run(["git", "log", "--oneline", "-1"],
+                              capture_output=True, text=True, timeout=10,
+                              cwd=REPO_ROOT).stdout.strip()
+        print(f"  [--] git HEAD: {head}")
+        dirty = subprocess.run(["git", "status", "--porcelain",
+                                "pipeline", "web"],
+                               capture_output=True, text=True, timeout=10,
+                               cwd=REPO_ROOT).stdout.strip()
+        if dirty:
+            bad("local edits shadow the checked-out code; pulled fixes are "
+                "NOT what runs:")
+            for line in dirty.splitlines():
+                print(f"       {line}")
+            print("       restore with: git restore <file>  "
+                  "(git stash first if you want a backup)")
+        else:
+            ok("pipeline/ and web/ match the checked-out commit")
+    except Exception as e:
+        print(f"  [--] git check skipped: {e}")
+
+    # 2. Does THIS process see the model env?
+    model = config_mod.pipeline_model()
+    if config_mod.mock_mode():
+        why = ("PIPELINE_MOCK=1" if os.environ.get("PIPELINE_MOCK") == "1"
+               else "PIPELINE_MODEL unset in this shell")
+        bad(f"mock mode ({why}): angles/drafts will be canned templates. "
+            "Export PIPELINE_MODEL in the SAME shell, then start the server.")
+    else:
+        ok(f"model: {model}")
+
+    # 3. Ollama specifics.
+    if model and model.startswith("ollama/") and not config_mod.mock_mode():
+        name = model.removeprefix("ollama/")
+        print(f"  [--] ollama host {config_mod.ollama_host()}, "
+              f"num_ctx {config_mod.ollama_num_ctx()}")
+        try:
+            names = llm.ollama_list_models()
+            if any(n == name or n.split(":")[0] == name for n in names):
+                ok(f"model pulled: {name}")
+            else:
+                bad(f"{name!r} is not pulled; ollama has {names}. "
+                    f"Run: ollama pull {name}")
+        except llm.LLMError as e:
+            bad(str(e))
+
+    # 4. One tiny live round trip through the real routing.
+    if not config_mod.mock_mode() and not args.no_call:
+        try:
+            client = llm.LLMClient(run_id="doctor")
+            reply = client.complete_text(
+                "caption", "Reply with the single word: pong", "ping",
+                max_tokens=10)
+            ok(f"live model call round-tripped ({client.budget.used} tokens, "
+               f"reply {reply.strip()[:30]!r})")
+        except Exception as e:
+            bad(f"live model call failed: {e}")
+
+    print("all good" if not problems
+          else f"{problems} problem(s); fix the [!!] lines top to bottom")
+    return 0 if not problems else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="pipeline",
@@ -365,6 +451,12 @@ def build_parser() -> argparse.ArgumentParser:
                     dest="files", help="changed file, repeatable")
     cu.add_argument("-s", "--summary", required=True)
     cu.set_defaults(fn=cmd_context_update)
+
+    dr = sub.add_parser("doctor", help="self-check: code drift, env, model "
+                                       "reachability")
+    dr.add_argument("--no-call", action="store_true",
+                    help="skip the live model round trip")
+    dr.set_defaults(fn=cmd_doctor)
 
     return p
 

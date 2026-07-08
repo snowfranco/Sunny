@@ -204,6 +204,18 @@ def serve(port: int | None = None) -> None:
     httpd.cfg = cfg          # type: ignore[attr-defined]
     httpd.db_conn = conn     # type: ignore[attr-defined]
     print(f"sunny local page: http://127.0.0.1:{httpd.server_port}/  (Ctrl-C stops)")
+    # Boot banner: what THIS process will actually use. Env exported in
+    # another shell, or after startup, does not reach a running server.
+    model = config.pipeline_model()
+    if config.mock_mode():
+        why = "PIPELINE_MODEL unset" if model is None else "PIPELINE_MOCK=1"
+        print(f"model: MOCK MODE ({why}); angles and drafts will be canned "
+              "templates")
+    elif model.startswith("ollama/"):
+        print(f"model: {model} via {config.ollama_host()}/api/chat "
+              f"(num_ctx {config.ollama_num_ctx()})")
+    else:
+        print(f"model: {model}")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
