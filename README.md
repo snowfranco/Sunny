@@ -71,10 +71,36 @@ runs in deterministic mock mode: every step executes end-to-end with canned,
 schema-valid outputs, which is also how the test suite and golden fixtures run
 without an API key.
 
+Routing is by model-name prefix, so `PIPELINE_MODEL` also drives local and
+Google models with no code change:
+
 ```bash
-export ANTHROPIC_API_KEY=...      # required for real runs
-export PIPELINE_MODEL=...         # decide later; any Anthropic model id
+# Anthropic (cloud)
+export ANTHROPIC_API_KEY=...
+export PIPELINE_MODEL=<anthropic-model-id>
+
+# Local via Ollama  (ollama serve running; model pulled)
+export PIPELINE_MODEL=ollama/llama3.1:8b
+export OLLAMA_HOST=http://localhost:11434     # optional, this is the default
+
+# Google
+export GEMINI_API_KEY=...
+export PIPELINE_MODEL=gemini-2.0-flash
 ```
+
+### Choosing a local model
+
+The Substack essay is the hardest thing here: it must clear a 9-point voice
+checklist (no em dashes, no signpost sentences, no banned lingo, length
+bounds, gist line, and more) in at most two reviewer retries. Small models
+(7-8B: `llama3.1:8b`, `mistral`) trip one rule per attempt and lean on the
+escalation escape hatch, where you hand-fix the flagged line and export.
+Mid-size instruct models (`mistral-nemo:12b`, `qwen2.5:14b`,
+`llama3.1:70b` if you have the RAM) clear the bar unaided far more often.
+Switching is one line: `export PIPELINE_MODEL=ollama/mistral-nemo:12b`,
+then restart the server. `python3 -m pipeline doctor --judge` confirms the
+model is reachable and the judge parses. Short formats (LinkedIn, social,
+script) are well within reach of a 7-8B model regardless.
 
 ## Layout
 

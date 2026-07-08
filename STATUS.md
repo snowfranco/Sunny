@@ -3,6 +3,23 @@
 One note per phase, newest at the top. Written during the initial build
 session; future sessions should keep appending here.
 
+## Writer plagiarism fix: stop feeding it the voice examples (2026-07-08)
+
+A generated essay came back reading like a pre-written article: it had
+copied brand-voice.md's verbatim example sentences ("Claude usage wall
+mid-session", "no excuses left", "code generation part is fast") as if they
+were content, and invented a fake citation ("a study by Project Smart") to
+pad off-topic. Root cause: the writer was handed the entire brand-voice.md,
+which is wall-to-wall quotable examples, and a small model copies them
+instead of treating them as style. Fix: the writer context now excludes
+brand-voice.md (its voice rules live in WRITER_SYSTEM; the reviewer still
+judges against the full guide separately), and WRITER_SYSTEM now forbids
+inventing studies/citations and forbids reusing any example wording or
+subjects, insisting the piece come only from the source note. README gains
+a "choosing a local model" section (7-8B leans on the escape hatch; 12-14B+
+clears the voice bar unaided; switching is one env var). 111 tests green,
+goldens clean.
+
 ## Escalation escape hatch + false-positive fix (2026-07-08)
 
 Two things behind the endless escalations. First, a real checker bug: the

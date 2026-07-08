@@ -30,8 +30,16 @@ by a reviewer after you, so violations just cost a retry:
   the future of X, paradigm shift, democratize, transformative.
 - When contrasting old and new ways of working, frame it as evolution
   ("the old thing was ___, here's how that's evolving"), never a battle.
-- Every specific number, project name, or fact must come from the source
-  note or context provided. Do not invent.
+- Write ONLY about what is in the SOURCE NOTE. Every specific fact, number,
+  project name, tool, and event must come from the note. Never invent
+  studies, statistics, sources, citations, or companies (no "according to a
+  study by ..."). If the note is thin, the piece stays short and specific;
+  do not pad it with general commentary about the topic.
+- Any example sentences in these instructions or the context demonstrate
+  STYLE ONLY. Never reuse their wording or their specific subjects (for
+  instance a "Claude usage wall", "ClaudeGauge", or a "bad-weather weekend"
+  are examples, not your material). Write from THIS note's real details, in
+  your own words.
 - The FORMAT BRIEF in the user message defines this piece's structure and
   length. It overrides any general instinct to write more or add structural
   elements the brief does not ask for."""
@@ -172,9 +180,17 @@ def _ensure_gist_line(client: llm.LLMClient, angle: S.AngleOption,
 
 
 def _writing_context(context_dir: Path | None = None) -> str:
+    """Context for the writer. Deliberately EXCLUDES brand-voice.md: that
+    file is wall-to-wall verbatim example sentences, and small models copy
+    those examples into the draft instead of treating them as style (the
+    "Claude usage wall / no excuses left" plagiarism). The voice rules the
+    writer needs live in WRITER_SYSTEM; the reviewer still judges against the
+    full brand-voice.md separately. Pillars, strategy, and platform rules are
+    about what to write and how to format it, not quotable prose, so they
+    stay."""
     d = context_dir or REPO_ROOT / "context"
     parts = []
-    for name in ("brand-voice.md", "pillars.md", "strategy.md", "platforms.md"):
+    for name in ("pillars.md", "strategy.md", "platforms.md"):
         f = d / name
         if f.is_file():
             parts.append(f"--- {name} ---\n" + f.read_text(encoding="utf-8"))

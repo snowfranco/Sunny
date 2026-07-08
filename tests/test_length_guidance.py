@@ -132,6 +132,37 @@ class TestLengthGuidanceInPrompts(unittest.TestCase):
         self.assertIn("between 400 and 900 words", client.prompts[0])
 
 
+class TestWriterContextIsPlagiarismSafe(unittest.TestCase):
+    """The writer must not be fed brand-voice.md's verbatim example
+    sentences; small models copy them into the draft as content."""
+
+    def test_writer_context_excludes_brand_voice_examples(self):
+        ctx = writer._writing_context()
+        for leak in ("Claude usage wall", "no excuses left",
+                     "code generation part is fast"):
+            self.assertNotIn(leak, ctx, f"writer context leaks example: {leak!r}")
+        # but it still carries the content/format guidance
+        self.assertIn("pillars.md", ctx)
+        self.assertIn("platforms.md", ctx)
+
+    def test_writer_prompt_body_has_no_example_sentences(self):
+        conn = _conn()
+        note = capture.capture_manual(conn, "shipped the num_ctx fix today")
+        angles = angle_engine.generate_angles(conn, note)
+        essay = [a for a in angles if a.format == "substack_essay"][0]
+        client = _CapturingClient()
+        writer.write_draft(conn, essay, note, client)
+        prompt = client.prompts[0]
+        self.assertNotIn("Claude usage wall", prompt)
+        self.assertNotIn("no excuses left", prompt)
+
+    def test_system_prompt_forbids_fabrication_and_copying(self):
+        squashed = " ".join(writer.WRITER_SYSTEM.split())
+        self.assertIn("Never invent studies", squashed)
+        self.assertIn("STYLE ONLY", squashed)
+        self.assertIn("Write ONLY about what is in the SOURCE NOTE", squashed)
+
+
 class TestFormatBriefs(unittest.TestCase):
     def test_every_format_has_a_brief(self):
         self.assertEqual(set(writer.FORMAT_BRIEFS), set(S.FORMATS))
