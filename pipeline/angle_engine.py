@@ -71,7 +71,9 @@ def generate_angles(conn, note: S.CaptureNote,
             for a in angles:
                 db.save_angle(conn, a)
             return angles
-        except (S.SchemaError, llm.LLMError) as e:
+        except S.SchemaError as e:
+            # Malformed but reachable: re-ask (the model produced something,
+            # just the wrong shape).
             last_err = e
             user += f"\n\nYour previous reply was invalid ({e}). Fix it."
     raise S.SchemaError(f"angle engine produced invalid output after "

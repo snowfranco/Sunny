@@ -176,11 +176,32 @@ class LLMClient:
         try:
             with urllib.request.urlopen(req, timeout=300) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
-        except urllib.error.URLError as e:
+        except urllib.error.HTTPError as e:
+            # The server answered, so it IS running; this is a request-level
+            # problem. Ollama's body usually says exactly what (most often a
+            # model that is not pulled). Surface it verbatim.
+            body = ""
+            try:
+                body = e.read().decode("utf-8", "replace")
+                body = json.loads(body).get("error", body)
+            except Exception:
+                pass
+            if e.code == 404 or "not found" in body.lower():
+                raise LLMError(
+                    f"Ollama is running but the model {model!r} is not "
+                    f"available (HTTP {e.code}: {body or 'not found'}). Pull "
+                    f"it first: `ollama pull {model}`, then check with "
+                    f"`ollama list`. Confirm the exact tag matches "
+                    f"PIPELINE_MODEL=ollama/{model}.") from e
             raise LLMError(
-                f"cannot reach Ollama at {config.ollama_host()} "
-                f"({e}). Is `ollama serve` running in this environment, and "
-                f"is the model pulled (`ollama pull {model}`)?") from e
+                f"Ollama request failed (HTTP {e.code}: {body or e.reason}). "
+                f"Model {model!r} at {config.ollama_host()}.") from e
+        except urllib.error.URLError as e:
+            # No HTTP response at all: the server is not reachable.
+            raise LLMError(
+                f"cannot reach Ollama at {config.ollama_host()} ({e.reason}). "
+                f"Is `ollama serve` running? Start it, then `ollama pull "
+                f"{model}`.") from e
         used = int(data.get("prompt_eval_count", 0)) + int(data.get("eval_count", 0))
         self.budget.charge(used or _approx_tokens(system + user) + max_tokens // 2)
         return str(data.get("message", {}).get("content", ""))

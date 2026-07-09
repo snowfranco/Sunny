@@ -3,6 +3,18 @@
 One note per phase, newest at the top. Written during the initial build
 session; future sessions should keep appending here.
 
+## Ollama 404 diagnosed correctly (2026-07-08)
+
+Switching to mistral-nemo:12b hit "cannot reach Ollama ... HTTP 404", which
+read as a server-down problem when it is the opposite: the server answered,
+the model just was not pulled. The Ollama call now separates HTTPError
+(server up, request-level: reads Ollama's own error body and, on 404 /
+"not found", says "model not available, run ollama pull <model>, check the
+tag") from URLError (genuinely unreachable, "is ollama serve running").
+The angle engine no longer retries a transport/model LLMError three times,
+so the clear message surfaces immediately instead of buried under "after 3
+attempts". 113 tests green, goldens clean.
+
 ## Writer plagiarism fix: stop feeding it the voice examples (2026-07-08)
 
 A generated essay came back reading like a pre-written article: it had

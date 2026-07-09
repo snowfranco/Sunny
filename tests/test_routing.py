@@ -164,6 +164,61 @@ class TestOllamaRouting(unittest.TestCase):
             self.assertIn("ollama serve", str(ctx.exception))
 
 
+class _NotFoundOllama(BaseHTTPRequestHandler):
+    """Ollama with the server up but the model not pulled: 404 + error body,
+    exactly what /api/chat returns for an unpulled model."""
+
+    def do_POST(self):
+        out = json.dumps({"error": "model 'mistral-nemo:12b' not found, "
+                          "try pulling it first"}).encode()
+        self.send_response(404)
+        self.send_header("Content-Length", str(len(out)))
+        self.end_headers()
+        self.wfile.write(out)
+
+    def log_message(self, *a):
+        pass
+
+
+class TestOllamaModelNotPulled(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.httpd = HTTPServer(("127.0.0.1", 0), _NotFoundOllama)
+        threading.Thread(target=cls.httpd.serve_forever, daemon=True).start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.httpd.shutdown()
+
+    def test_404_says_model_not_pulled_not_server_down(self):
+        with _EnvPatch(PIPELINE_MODEL="ollama/mistral-nemo:12b",
+                       PIPELINE_MOCK=None,
+                       OLLAMA_HOST=f"http://127.0.0.1:{self.httpd.server_port}"):
+            client = llm.LLMClient("t")
+            with self.assertRaises(llm.LLMError) as ctx:
+                client.complete_text("draft", "s", "u")
+            msg = str(ctx.exception)
+            self.assertIn("not available", msg)
+            self.assertIn("ollama pull mistral-nemo:12b", msg)
+            self.assertNotIn("ollama serve", msg)  # server IS up
+
+    def test_angle_engine_does_not_retry_a_model_error(self):
+        # A missing model won't fix itself on re-ask; the clear error should
+        # surface immediately, not after 3 attempts.
+        import sqlite3
+        from pipeline import angle_engine, capture, db
+        conn = sqlite3.connect(":memory:"); conn.row_factory = sqlite3.Row
+        db.init_db(conn)
+        with _EnvPatch(PIPELINE_MODEL="ollama/mistral-nemo:12b",
+                       PIPELINE_MOCK=None,
+                       OLLAMA_HOST=f"http://127.0.0.1:{self.httpd.server_port}"):
+            note = capture.capture_manual(conn, "a topic")
+            with self.assertRaises(llm.LLMError) as ctx:
+                angle_engine.generate_angles(conn, note, llm.LLMClient("t"))
+            self.assertIn("ollama pull", str(ctx.exception))
+            self.assertNotIn("after 3 attempts", str(ctx.exception))
+
+
 class TestGeminiRouting(unittest.TestCase):
     def test_gemini_without_key_or_package_raises(self):
         with _EnvPatch(PIPELINE_MODEL="gemini-something", PIPELINE_MOCK=None,
